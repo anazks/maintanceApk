@@ -382,14 +382,14 @@ export default function EquipmentDetails() {
 
             <View style={[styles.infoRow, styles.maintenanceRow]}>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Last Maintenance</Text>
+                <Text style={styles.label}>Last Routine</Text>
                 <View style={styles.dateBadge}>
                   <Ionicons name="checkmark-circle" size={16} color="#059669" />
                   <Text style={[styles.value, styles.lastMaintenanceText]}>{lastMaintenance}</Text>
                 </View>
               </View>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Next Maintenance</Text>
+                <Text style={styles.label}>Next Routine</Text>
                 <View style={styles.dateBadge}>
                   <Ionicons name="alert-circle" size={16} color="#DC2626" />
                   <Text style={[styles.value, styles.nextMaintenanceText]}>{nextMaintenance}</Text>
@@ -401,22 +401,22 @@ export default function EquipmentDetails() {
           <TouchableOpacity
             style={styles.historyButton}
             onPress={() => router.push({
-              pathname: '/maintenance-history',
+              pathname: '/routine-history',
               params: { equipmentId: equipment.equipment_id, equipmentName: equipment.name }
             })}
           >
             <View style={styles.historyButtonContent}>
               <Ionicons name="time-outline" size={18} color="#2563EB" />
-              <Text style={styles.historyButtonText}>View Full Maintenance History</Text>
+              <Text style={styles.historyButtonText}>View Full Routine History</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#2563EB" />
           </TouchableOpacity>
         </View>
 
-        {/* Maintenance Schedules */}
+        {/* Routines */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Maintenance Schedules</Text>
+            <Text style={styles.sectionTitle}>Routines</Text>
             <View style={styles.sectionBadge}>
               <Text style={styles.sectionBadgeText}>{schedules.length}</Text>
             </View>
@@ -430,21 +430,24 @@ export default function EquipmentDetails() {
           ) : (
             schedules.map(sched => {
               const dateStr = sched.next_maintenance ? sched.next_maintenance.split(' ')[0] : 'Pending';
-              let isFuture = false;
-              if (sched.next_maintenance) {
-                const curDateStr = new Date().toISOString().split('T')[0];
-                const schedDateStr = sched.next_maintenance.split(' ')[0];
-                isFuture = schedDateStr > curDateStr;
-              }
+              const curDateStr = new Date().toISOString().split('T')[0];
+              const isOverdue = dateStr !== 'Pending' && dateStr < curDateStr;
+              const isFuture = dateStr !== 'Pending' && dateStr > curDateStr;
+              const isToday = dateStr === curDateStr;
 
               return (
                 <View key={sched.id} style={styles.scheduleItem}>
                   <View style={styles.scheduleInfo}>
                     <View style={styles.scheduleTypeContainer}>
-                      <View style={[styles.scheduleDot, isFuture ? styles.scheduleDotFuture : styles.scheduleDotDue]} />
-                      <Text style={styles.scheduleType}>{sched.schedule_type} Maintenance</Text>
+                      <View style={[
+                        styles.scheduleDot, 
+                        isOverdue ? styles.scheduleDotDue : (isFuture ? styles.scheduleDotFuture : { backgroundColor: '#F59E0B' })
+                      ]} />
+                      <Text style={styles.scheduleType}>{sched.schedule_type} Routine</Text>
                     </View>
-                    <Text style={styles.scheduleDate}>Due: {dateStr}</Text>
+                    <Text style={[styles.scheduleDate, isOverdue && { color: '#EF4444', fontWeight: 'bold' }]}>
+                      {isOverdue ? 'Overdue: ' : (isToday ? 'Due Today: ' : 'Next Due: ')}{dateStr}
+                    </Text>
                     {isFuture && (
                       <View style={styles.lockBadge}>
                         <Ionicons name="lock-closed" size={12} color="#9CA3AF" />
@@ -456,7 +459,7 @@ export default function EquipmentDetails() {
                     style={[styles.executeButton, isFuture && styles.executeButtonDisabled]}
                     disabled={isFuture}
                     onPress={() => router.push({
-                      pathname: '/maintenance-execute',
+                      pathname: '/routine-execute',
                       params: {
                         id: sched.id.toString(),
                         equipment_name: equipment.name,

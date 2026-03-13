@@ -256,7 +256,7 @@ export default function Settings() {
             onPress={() => setActiveTab('Checklists')}
           >
             <Text style={[styles.tabText, activeTab === 'Checklists' && styles.tabTextActive]}>
-              Manage Checklists
+              Manage Routines
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -312,8 +312,8 @@ export default function Settings() {
           {/* Scheduling Configuration - Only visible in Checklists Tab */}
           {activeTab === 'Checklists' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Dynamic Checklists</Text>
-              <Text style={styles.sectionSubtitle}>Configure specific maintenance tasks per equipment</Text>
+              <Text style={styles.sectionTitle}>Dynamic Routines</Text>
+              <Text style={styles.sectionSubtitle}>Configure specific routines and tasks per equipment</Text>
 
             <View style={styles.card}>
               
@@ -325,7 +325,7 @@ export default function Settings() {
               >
                 <Text style={styles.dropdownBtnText}>
                   {selectedEquipment 
-                    ? equipmentList.find(e => e.id === selectedEquipment)?.name || 'Unknown'
+                    ? `Routine Checklist for ${equipmentList.find(e => e.id === selectedEquipment)?.name || 'Unknown'}`
                     : 'Select Equipment...'}
                 </Text>
                 <Ionicons name="chevron-down" size={20} color="#6B7280" />
@@ -334,46 +334,64 @@ export default function Settings() {
                 <Text style={styles.emptyText}>No equipment found. Add some first.</Text>
               )}
 
-              {/* All Checklist Items Grouped */}
+              {/* All Checklist Items Grouped by Frequency */}
               {SCHEDULES.map(schedule => {
                 const items = checklistItems.filter(i => i.schedule_type === schedule);
-                if (items.length === 0) return null;
                 return (
-                  <View key={schedule} style={{ marginBottom: 16 }}>
+                  <View key={schedule} style={styles.routineSlot}>
                     <View style={styles.checklistHeader}>
-                      <Text style={styles.listTitle}>{schedule} Tasks</Text>
-                    </View>
-                    {items.map((item, index) => (
-                      <View key={item.id} style={styles.taskItem}>
-                        <View style={styles.taskNum}><Text style={styles.taskNumText}>{index + 1}</Text></View>
-                        <Text style={styles.taskDesc}>{item.task_description}</Text>
-                        <TouchableOpacity style={{ marginRight: 16 }} onPress={() => {
-                          setEditTaskData({ id: item.id, text: item.task_description });
-                          setShowEditModal(true);
-                        }}>
-                          <Ionicons name="pencil-outline" size={18} color="#2563EB" />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => deleteChecklistItem(item.id)}>
-                          <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                        </TouchableOpacity>
+                      <View style={styles.slotTitleRow}>
+                        <Ionicons 
+                          name={items.length > 0 ? "checkbox" : "square-outline"} 
+                          size={18} 
+                          color={items.length > 0 ? "#2563EB" : "#9CA3AF"} 
+                        />
+                        <Text style={styles.listTitle}>{schedule} Routine</Text>
                       </View>
-                    ))}
+                      <TouchableOpacity 
+                        onPress={() => {
+                          setSelectedSchedule(schedule);
+                          setShowAddModal(true);
+                        }}
+                        style={styles.addInlineBtn}
+                      >
+                        <Ionicons name="add-circle" size={24} color="#2563EB" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {items.length === 0 ? (
+                      <View style={styles.emptySlotContainer}>
+                        <Text style={styles.emptySlotText}>No tasks for {schedule.toLowerCase()} routine</Text>
+                      </View>
+                    ) : (
+                      items.map((item, index) => (
+                        <View key={item.id} style={styles.taskItem}>
+                          <View style={styles.taskNum}><Text style={styles.taskNumText}>{index + 1}</Text></View>
+                          <Text style={styles.taskDesc}>{item.task_description}</Text>
+                          <View style={styles.taskActions}>
+                            <TouchableOpacity style={{ marginRight: 12 }} onPress={() => {
+                              setEditTaskData({ id: item.id, text: item.task_description });
+                              setShowEditModal(true);
+                            }}>
+                              <Ionicons name="pencil-outline" size={18} color="#2563EB" />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => deleteChecklistItem(item.id)}>
+                              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))
+                    )}
                   </View>
                 );
               })}
 
               {checklistItems.length === 0 && selectedEquipment && (
-                <Text style={styles.emptyText}>No tasks defined yet.</Text>
+                <View style={styles.initialEmptyState}>
+                  <Ionicons name="construct-outline" size={48} color="#D1D5DB" />
+                  <Text style={styles.emptyText}>Start by configuring your first routine above.</Text>
+                </View>
               )}
-
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => setShowAddModal(true)}
-                disabled={!selectedEquipment}
-              >
-                <Ionicons name="add-circle-outline" size={20} color={selectedEquipment ? "#2563EB" : "#9CA3AF"} />
-                <Text style={[styles.actionText, !selectedEquipment && { color: '#9CA3AF' }]}>Add New Task</Text>
-              </TouchableOpacity>
             </View>
           </View>
           )}
@@ -608,7 +626,21 @@ const styles = StyleSheet.create({
   taskItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   taskNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   taskNumText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
-  taskDesc: { flex: 1, fontSize: 14, color: '#374151' },
+  taskDesc: { flex: 1, fontSize: 14, color: '#374151', paddingRight: 8 },
+  taskActions: { flexDirection: 'row', alignItems: 'center' },
+  routineSlot: { 
+    marginBottom: 20, 
+    backgroundColor: '#F8FAFC', 
+    borderRadius: 16, 
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9'
+  },
+  slotTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  addInlineBtn: { padding: 4 },
+  emptySlotContainer: { padding: 12, alignItems: 'center', justifyContent: 'center' },
+  emptySlotText: { fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' },
+  initialEmptyState: { alignItems: 'center', paddingVertical: 32, gap: 12 },
   actionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, marginTop: 12, gap: 8 },
   actionText: { fontSize: 14, fontWeight: '600', color: '#2563EB' },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

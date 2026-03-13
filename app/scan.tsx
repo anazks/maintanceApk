@@ -34,6 +34,7 @@ export default function ScanEquipment() {
     remarks: string,
     tasks: { description: string, completed: boolean }[]
   } | null>(null);
+  const [assignedRoutines, setAssignedRoutines] = useState<{ id: number, type: string, next_due: string, is_overdue: boolean, is_future: boolean }[]>([]);
   const [linkedSpares, setLinkedSpares] = useState<{ id: number, name: string, part_number: string, available_quantity: number, minimum_quantity: number }[]>([]);
   const router = useRouter();
 
@@ -108,6 +109,7 @@ export default function ScanEquipment() {
     setEquipmentName('');
     setEquipmentName('');
     setLastMaintenance(null);
+    setAssignedRoutines([]);
     setLinkedSpares([]);
     setDefectForm({ title: '', description: '', priority: 'Medium' });
     setShowDefectModal(false);
@@ -131,7 +133,6 @@ export default function ScanEquipment() {
         );
 
         if (last) {
-          // Fetch log items
           const items = db.getAllSync<{ task_description: string, is_completed: number }>(`
             SELECT ci.task_description, mli.is_completed
             FROM Maintenance_Log_Items mli
@@ -149,6 +150,24 @@ export default function ScanEquipment() {
             }))
           });
         }
+
+        // Fetch all assigned routine schedules
+        const routines = db.getAllSync<{ id: number, schedule_type: string, next_maintenance: string }>(
+          'SELECT id, schedule_type, next_maintenance FROM Maintenance_Schedule WHERE equipment_id = ?',
+          [eq.id]
+        );
+
+        const curDateStr = new Date().toISOString().split('T')[0];
+        setAssignedRoutines(routines.map(r => {
+          const nextDue = r.next_maintenance ? r.next_maintenance.split(' ')[0] : 'Unscheduled';
+          return {
+            id: r.id,
+            type: r.schedule_type,
+            next_due: nextDue,
+            is_overdue: nextDue !== 'Unscheduled' && nextDue < curDateStr,
+            is_future: nextDue !== 'Unscheduled' && nextDue > curDateStr
+          };
+        }));
 
         // Fetch linked spares
         const spares = db.getAllSync<{ id: number, name: string, part_number: string, available_quantity: number, minimum_quantity: number }>(`
@@ -332,10 +351,11 @@ export default function ScanEquipment() {
                       onPress={() => {
                         setShowDetails(false);
                         router.push({
-                          pathname: '/maintenance-history',
+                          pathname: '/routine-history',
                           params: {
-                            equipmentId: scannedData?.id || scannedData?.equipment_id || equipmentId,
-                            equipmentName: equipmentName || scannedData?.name
+                            equipment_id: (scannedData?.id || scannedData?.equipment_id || equipmentId)?.toString(),
+                            equipment_name: equipmentName || scannedData?.name,
+                            equip_sys_id: scannedData?.equipment_id
                           }
                         });
                       }}
@@ -343,6 +363,37 @@ export default function ScanEquipment() {
                       <Text style={styles.fullHistoryLinkText}>View Full Service Ledger</Text>
                       <Ionicons name="arrow-forward" size={14} color="#2563EB" />
                     </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.rawInfoSection}>
+                <Text style={styles.sectionHeader}>Active Routines</Text>
+                {assignedRoutines.length === 0 ? (
+                  <View style={styles.emptySparesContainer}>
+                    <Text style={styles.emptySparesText}>No routines assigned to this asset</Text>
+                  </View>
+                ) : (
+                  <View style={styles.routinesList}>
+                    {assignedRoutines.map(routine => (
+                      <View key={routine.id} style={styles.routineItem}>
+                        <View style={styles.routineInfo}>
+                          <Text style={styles.routineType}>{routine.type} Routine</Text>
+                          <Text style={styles.routineDue}>Next Due: {routine.next_due}</Text>
+                        </View>
+                        <View style={[
+                          styles.statusBadge,
+                          { backgroundColor: routine.is_overdue ? '#FEF2F2' : (routine.is_future ? '#F0FDF4' : '#FFFBEB') }
+                        ]}>
+                          <Text style={[
+                            styles.statusBadgeText,
+                            { color: routine.is_overdue ? '#EF4444' : (routine.is_future ? '#10B981' : '#F59E0B') }
+                          ]}>
+                            {routine.is_overdue ? 'OVERDUE' : (routine.is_future ? 'Upcoming' : 'Due Today')}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
                   </View>
                 )}
               </View>
@@ -427,10 +478,11 @@ export default function ScanEquipment() {
                   onPress={() => {
                     setShowDetails(false);
                     router.push({
-                      pathname: '/maintenance-history',
+                      pathname: '/routine-history',
                       params: {
-                        equipmentId: scannedData?.id || scannedData?.equipment_id || equipmentId,
-                        equipmentName: equipmentName || scannedData?.name
+                        equipment_id: (scannedData?.id || scannedData?.equipment_id || equipmentId)?.toString(),
+                        equipment_name: equipmentName || scannedData?.name,
+                        equip_sys_id: scannedData?.equipment_id
                       }
                     });
                   }}
@@ -1133,5 +1185,44 @@ export default function ScanEquipment() {
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  // Active Routines Styles
+  routinesList: {
+    gap: 12,
+  },
+  routineItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  routineInfo: {
+    flex: 1,
+  },
+  routineType: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  routineDue: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

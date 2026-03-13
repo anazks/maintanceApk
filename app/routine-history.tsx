@@ -39,7 +39,7 @@ interface MaintenanceLog {
   expanded?: boolean;
 }
 
-export default function MaintenanceHistory() {
+export default function RoutineHistory() {
   const router = useRouter();
   const { equipmentId, equipmentName } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
@@ -51,20 +51,22 @@ export default function MaintenanceHistory() {
     try {
       // Get the internal ID if equipment_id (string) was passed
       let internalId: number;
-      if (isNaN(Number(equipmentId))) {
-        const eqRec = db.getFirstSync<{ id: number }>('SELECT id FROM Equipment WHERE equipment_id = ?', [equipmentId]);
+      const equipIdStr = Array.isArray(equipmentId) ? equipmentId[0] : equipmentId;
+
+      if (isNaN(Number(equipIdStr))) {
+        const eqRec = db.getFirstSync<{ id: number }>('SELECT id FROM Equipment WHERE equipment_id = ?', [equipIdStr]);
         if (!eqRec) {
           setLoading(false);
           return;
         }
         internalId = eqRec.id;
       } else {
-        internalId = Number(equipmentId);
+        internalId = Number(equipIdStr);
       }
 
       const dbLogs = db.getAllSync<any>(
         'SELECT * FROM Maintenance_Log WHERE equipment_id = ? ORDER BY maintenance_date DESC',
-        [internalId as any]
+        [internalId.toString()]
       );
 
       const logsWithItems = dbLogs.map((log: any) => {
@@ -208,7 +210,7 @@ export default function MaintenanceHistory() {
           <View style={styles.emptyContainer}>
             <Ionicons name="document-text-outline" size={64} color="#E5E7EB" />
             <Text style={styles.emptyTitle}>No History Found</Text>
-            <Text style={styles.emptyText}>No maintenance logs have been recorded for this asset yet.</Text>
+            <Text style={styles.emptyText}>No routine logs have been recorded for this asset yet.</Text>
           </View>
         }
       />

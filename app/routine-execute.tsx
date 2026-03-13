@@ -23,7 +23,7 @@ interface ChecklistItem {
   is_completed: boolean;
 }
 
-export default function MaintenanceExecute() {
+export default function RoutineExecute() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const scheduleId = Number(params.id) || 0;
@@ -36,7 +36,7 @@ export default function MaintenanceExecute() {
   // Equipment details derived from params
   const equipmentName = (params.equipment_name as string) || 'Unknown Equipment';
   const equipmentId = (params.equipment_id as string) || 'N/A';
-  const scheduleType = (params.schedule_type as string) || 'Maintenance';
+  const scheduleType = (params.schedule_type as string) || 'Routine';
 
   useEffect(() => {
     if (scheduleId) loadChecklistItems();
@@ -77,7 +77,7 @@ export default function MaintenanceExecute() {
     ));
   };
 
-  const saveMaintenanceLog = () => {
+  const saveRoutineLog = () => {
     if (!maintainer.trim()) {
       Alert.alert('Required', 'Please enter maintainer name');
       return;
@@ -87,7 +87,7 @@ export default function MaintenanceExecute() {
     if (uncompleted > 0) {
       Alert.alert(
         'Incomplete Tasks',
-        `You have ${uncompleted} incomplete tasks. Are you sure you want to finish this maintenance?`,
+        `You have ${uncompleted} incomplete tasks. Are you sure you want to finish this routine?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Save Anyway', style: 'destructive', onPress: commitLog }
@@ -140,12 +140,12 @@ export default function MaintenanceExecute() {
         schedulePushNotification(equipmentName, scheduleType, secondsMod);
       });
 
-      Alert.alert('Success', 'Maintenance log saved successfully', [
+      Alert.alert('Success', 'Routine log saved successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to save maintenance log');
+      Alert.alert('Error', 'Failed to save routine log');
     }
   };
 
@@ -153,8 +153,8 @@ export default function MaintenanceExecute() {
     try {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: "Maintenance Reminder 🛠️",
-          body: `The ${type} maintenance for ${equipName} is due soon!`,
+          title: "Routine Reminder 🛠️",
+          body: `The ${type} routine for ${equipName} is due soon!`,
           sound: "default"
         },
         trigger: {
@@ -267,9 +267,9 @@ export default function MaintenanceExecute() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.submitButton} onPress={saveMaintenanceLog}>
+          <TouchableOpacity style={styles.submitButton} onPress={saveRoutineLog}>
             <Ionicons name="save-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.submitButtonText}>Commit Maintenance Log</Text>
+            <Text style={styles.submitButtonText}>Commit Routine Log</Text>
           </TouchableOpacity>
           
         </ScrollView>

@@ -56,15 +56,26 @@ export default function AddEquipment() {
 
     try {
       const db = getDB();
-      db.runSync(
-        `INSERT INTO Equipment (equipment_id, name, section, location, manufacturer, model_number, serial_number, installation_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          formData.equipment_id, formData.name, formData.section, formData.location,
-          formData.manufacturer, formData.model_number, formData.serial_number,
-          formData.installation_date, formData.status
-        ]
-      );
+      db.withTransactionSync(() => {
+        const result = db.runSync(
+          `INSERT INTO Equipment (equipment_id, name, section, location, manufacturer, model_number, serial_number, installation_date, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            formData.equipment_id, formData.name, formData.section, formData.location,
+            formData.manufacturer, formData.model_number, formData.serial_number,
+            formData.installation_date, formData.status
+          ]
+        );
+        
+        const newEquipId = result.lastInsertRowId;
+        const routines = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
+        const routineStmt = db.prepareSync('INSERT INTO Maintenance_Schedule (equipment_id, schedule_type) VALUES (?, ?)');
+        
+        routines.forEach(type => {
+          routineStmt.executeSync([newEquipId, type]);
+        });
+        routineStmt.finalizeSync();
+      });
       
       setLoading(false);
       setShowQRModal(true); // Show the QR code modal on success

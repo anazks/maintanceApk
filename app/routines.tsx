@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { getDB } from '../database';
 
-interface MaintenanceTask {
+interface RoutineTask {
   id: number;
   equipment_name: string;
   equipment_id: string;
@@ -27,7 +27,7 @@ interface MaintenanceTask {
 export default function Maintenance() {
   const router = useRouter();
   const [selectedFilter, setSelectedFilter] = useState('All');
-  const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
+  const [tasks, setTasks] = useState<RoutineTask[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -180,7 +180,7 @@ export default function Maintenance() {
             <View style={styles.emptyState}>
               <Ionicons name="checkmark-circle-outline" size={64} color="#E5E7EB" />
               <Text style={styles.emptyStateTitle}>All caught up!</Text>
-              <Text style={styles.emptyStateText}>No maintenance tasks found for this filter.</Text>
+              <Text style={styles.emptyStateText}>No routine tasks found for this filter.</Text>
             </View>
           )}
           renderItem={({ item }) => (
@@ -205,7 +205,7 @@ export default function Maintenance() {
                 <TouchableOpacity 
                   style={styles.historyBtn}
                   onPress={() => router.push({
-                    pathname: '/maintenance-history',
+                    pathname: '/routine-history',
                     params: { equipmentId: item.equipment_id, equipmentName: item.equipment_name }
                   })}
                 >
@@ -218,7 +218,7 @@ export default function Maintenance() {
                   disabled={item.status === 'Completed'}
                   onPress={() => {
                     router.push({
-                      pathname: '/maintenance-execute',
+                      pathname: '/routine-execute',
                       params: {
                         id: item.id.toString(),
                         equipment_name: item.equipment_name,

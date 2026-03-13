@@ -39,10 +39,10 @@ const DEFAULT_MENU_ITEMS = [
   },
   {
     key: 'maint',
-    title: 'Maintenance',
-    subtitle: '18 pending · 2 overdue',
+    title: 'Routines',
+    subtitle: '18 pending',
     icon: 'build-outline',
-    route: '/maintenance',
+    route: '/routines',
   },
   {
     key: 'defect',
@@ -57,14 +57,7 @@ const DEFAULT_MENU_ITEMS = [
     subtitle: '156 items in stock',
     icon: 'cube-outline',
     route: '/parts',
-  },
-  {
-    key: 'analytics',
-    title: 'Analytics',
-    subtitle: 'Performance metrics',
-    icon: 'stats-chart-outline',
-    route: '/dashboard',
-  },
+  }
 ];
 
 // Move to dynamic state
@@ -175,7 +168,7 @@ export default function Index() {
   const [stats, setStats] = React.useState<StatItem[]>([
     { label: 'Total Equipment', value: '0', change: '0', icon: 'layers-outline' },
     { label: 'Active', value: '0', change: '0%', icon: 'checkmark-circle-outline' },
-    { label: 'Maintenance', value: '0', change: '0%', icon: 'construct-outline' },
+    { label: 'Routines', value: '0', change: '0%', icon: 'construct-outline' },
     { label: 'Defects', value: '0', change: '0', icon: 'alert-circle-outline' },
   ]);
 
@@ -227,7 +220,7 @@ export default function Index() {
       setStats([
         { label: 'Total Equipment', value: totalEq.toString(), change: `New`, icon: 'layers-outline' },
         { label: 'Active', value: activeEq.toString(), change: `${actPct}%`, icon: 'checkmark-circle-outline' },
-        { label: 'Maintenance', value: maintEq.toString(), change: `${mnPct}%`, icon: 'construct-outline' },
+        { label: 'Routines', value: maintEq.toString(), change: `${mnPct}%`, icon: 'construct-outline' },
         { label: 'Defects', value: defectsCount.toString(), change: `Issues`, icon: 'alert-circle-outline' },
       ]);
 
@@ -327,7 +320,7 @@ export default function Index() {
 
         {/* Recent Activity */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Maintenance logs</Text>
+          <Text style={styles.sectionTitle}>Recent Routine Logs</Text>
           <TouchableOpacity activeOpacity={0.7}>
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
@@ -336,7 +329,7 @@ export default function Index() {
         <View style={styles.activityList}>
           {activities.length > 0 ? activities.map((activity) => (
             <ActivityCard key={activity.id} item={activity} />
-          )) : <Text style={{textAlign: 'center', color: '#6B7280'}}>No recent maintenance records.</Text>}
+          )) : <Text style={{textAlign: 'center', color: '#6B7280'}}>No recent routine records.</Text>}
         </View>
 
         {/* Footer Metrics */}
@@ -350,8 +343,8 @@ export default function Index() {
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>Last Sync</Text>
-            <Text style={styles.metricValue}>Just now</Text>
+            <Text style={styles.metricValue}>{stats[2]?.value || '0'}</Text>
+            <Text style={styles.metricLabel}>Pending Routines</Text>
           </View>
         </View>
       </ScrollView>

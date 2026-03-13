@@ -165,6 +165,31 @@ export const initDB = () => {
       db.execSync('ALTER TABLE Defects ADD COLUMN report_date DATETIME DEFAULT CURRENT_TIMESTAMP;');
     } catch (e) { /* Column already exists */ }
 
+    // Ensure all Equipment have all 5 routine types in Maintenance_Schedule
+    try {
+      const equipments = db.getAllSync<{id: number}>('SELECT id FROM Equipment');
+      const routines = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
+      
+      const insertStmt = db.prepareSync('INSERT INTO Maintenance_Schedule (equipment_id, schedule_type) VALUES (?, ?)');
+
+      equipments.forEach(eq => {
+        routines.forEach(type => {
+          const existing = db.getFirstSync<{id: number}>(
+            'SELECT id FROM Maintenance_Schedule WHERE equipment_id = ? AND schedule_type = ?',
+            [eq.id, type]
+          );
+          if (!existing) {
+            insertStmt.executeSync([eq.id, type]);
+          }
+        });
+      });
+      
+      insertStmt.finalizeSync();
+      console.log('Routine slots verified for all equipment');
+    } catch (e) {
+      console.error('Failed to backfill routine slots:', e);
+    }
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
