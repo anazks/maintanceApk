@@ -4,7 +4,14 @@ import { router } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function MenuButton({ title, icon, route, color = '#4361EE' }) {
+interface MenuButtonProps {
+  title: string;
+  icon: any;
+  route: any;
+  color?: string;
+}
+
+export default function MenuButton({ title, icon, route, color = '#4361EE' }: MenuButtonProps) {
   return (
     <TouchableOpacity
       style={[styles.button, { borderColor: color }]}

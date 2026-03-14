@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -36,6 +37,7 @@ interface MaintenanceSchedule {
   id: number;
   schedule_type: string;
   next_maintenance: string;
+  task_count?: number;
 }
 
 interface AssignedSpare {
@@ -45,14 +47,26 @@ interface AssignedSpare {
   part_number: string;
   available_quantity: number;
   minimum_quantity: number;
+  linked_by?: string;
+}
+
+interface UsageRecord {
+  id: number;
+  spare_name: string;
+  part_number: string;
+  quantity_used: number;
+  maintainer_name: string;
+  used_date: string;
 }
 
 export default function EquipmentDetails() {
   const router = useRouter();
+  const { theme, isDarkMode } = useTheme();
   const { id } = useLocalSearchParams();
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([]);
   const [spares, setSpares] = useState<AssignedSpare[]>([]);
+  const [usageHistory, setUsageHistory] = useState<UsageRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastMaintenance, setLastMaintenance] = useState<string>('N/A');
   const [nextMaintenance, setNextMaintenance] = useState<string>('N/A');
@@ -66,6 +80,7 @@ export default function EquipmentDetails() {
   // Spares Assignment Modal
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [availableSpares, setAvailableSpares] = useState<any[]>([]);
+  const [linkMaintainerName, setLinkMaintainerName] = useState('');
 
   // Status Update Modal
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -75,7 +90,7 @@ export default function EquipmentDetails() {
   // Defect Reporting Modal
   const [showDefectModal, setShowDefectModal] = useState(false);
   const [defectLoading, setDefectLoading] = useState(false);
-  const [defectForm, setDefectForm] = useState({ title: '', description: '', priority: 'Medium' });
+  const [defectForm, setDefectForm] = useState({ title: '', description: '', priority: 'Medium', reportedBy: '' });
 
   useFocusEffect(
     useCallback(() => {
@@ -93,10 +108,13 @@ export default function EquipmentDetails() {
       if (item) {
         setEquipment(item);
         setTempStatus(item.status);
-        const scheds = db.getAllSync<MaintenanceSchedule>(
-          'SELECT id, schedule_type, next_maintenance FROM Maintenance_Schedule WHERE equipment_id = ?',
-          [item.id]
-        );
+        const scheds = db.getAllSync<MaintenanceSchedule>(`
+          SELECT ms.id, ms.schedule_type, ms.next_maintenance, COUNT(ci.id) as task_count
+          FROM Maintenance_Schedule ms
+          LEFT JOIN Checklist_Items ci ON ms.id = ci.schedule_id
+          WHERE ms.equipment_id = ?
+          GROUP BY ms.id
+        `, [item.id]);
         setSchedules(scheds);
 
         const nextDateObj = db.getFirstSync<{ next_date: string }>(
@@ -114,6 +132,7 @@ export default function EquipmentDetails() {
         const assignedSpares = db.getAllSync<AssignedSpare>(`
           SELECT 
             es.id,
+            es.linked_by,
             sp.id as spare_id,
             sp.name,
             sp.part_number,
@@ -124,6 +143,22 @@ export default function EquipmentDetails() {
           WHERE es.equipment_id = ?
         `, [item.id]);
         setSpares(assignedSpares);
+
+        const history = db.getAllSync<UsageRecord>(`
+          SELECT 
+            su.id,
+            sp.name as spare_name,
+            sp.part_number,
+            su.quantity_used,
+            su.maintainer_name,
+            su.used_date
+          FROM Spare_Usage su
+          JOIN Spare_Parts sp ON su.spare_id = sp.id
+          WHERE su.equipment_id = ?
+          ORDER BY su.used_date DESC
+          LIMIT 10
+        `, [item.id]);
+        setUsageHistory(history);
 
       } else {
         Alert.alert('Error', 'Equipment not found.');
@@ -139,8 +174,8 @@ export default function EquipmentDetails() {
   };
 
   const submitDefect = () => {
-    if (!defectForm.title.trim() || !defectForm.description.trim()) {
-      Alert.alert('Required', 'Please enter a title and description.');
+    if (!defectForm.title.trim() || !defectForm.description.trim() || !defectForm.reportedBy.trim()) {
+      Alert.alert('Required', 'Please fill in all required fields (Title, Description, and Reporter).');
       return;
     }
     if (!equipment) return;
@@ -150,12 +185,12 @@ export default function EquipmentDetails() {
     try {
       db.runSync(`
         INSERT INTO Defects (equipment_id, reported_by, title, description, priority, status, report_date)
-        VALUES (?, 'Operator', ?, ?, ?, 'Open', datetime('now'))
-      `, [equipment.id, defectForm.title, defectForm.description, defectForm.priority]);
+        VALUES (?, ?, ?, ?, ?, 'Open', datetime('now'))
+      `, [equipment.id, defectForm.reportedBy, defectForm.title, defectForm.description, defectForm.priority]);
 
       Alert.alert('Success', 'Defect report has been saved and maintenance notified.');
       setShowDefectModal(false);
-      setDefectForm({ title: '', description: '', priority: 'Medium' });
+      setDefectForm({ title: '', description: '', priority: 'Medium', reportedBy: '' });
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to save defect report.');
@@ -247,20 +282,24 @@ export default function EquipmentDetails() {
 
   const handleAssignSpare = (spareId: number) => {
     if (!equipment) return;
+    if (!linkMaintainerName.trim()) {
+      Alert.alert('Required', 'Please enter your name for "Linked By".');
+      return;
+    }
     const db = getDB();
     try {
       db.withTransactionSync(() => {
         // Link the spare to the equipment
         db.runSync(
-          'INSERT INTO Equipment_Spares (equipment_id, spare_id) VALUES (?, ?)',
-          [equipment.id, spareId]
+          'INSERT INTO Equipment_Spares (equipment_id, spare_id, linked_by) VALUES (?, ?, ?)',
+          [equipment.id, spareId, linkMaintainerName.trim()]
         );
 
         // Record usage (auto-deduct 1 unit for immediate setup/use)
         db.runSync(`
           INSERT INTO Spare_Usage (spare_id, equipment_id, quantity_used, maintainer_name, used_date)
-          VALUES (?, ?, 1, 'Auto-Link', datetime('now'))
-        `, [spareId, equipment.id]);
+          VALUES (?, ?, 1, ?, datetime('now'))
+        `, [spareId, equipment.id, linkMaintainerName.trim()]);
 
         // Deduct from stock
         db.runSync(`
@@ -271,6 +310,7 @@ export default function EquipmentDetails() {
       });
 
       setShowAssignModal(false);
+      setLinkMaintainerName('');
       loadDetails(equipment.id);
       Alert.alert('Success', 'Part linked and 1 unit deducted from stock for initial use.');
     } catch (e) {
@@ -301,9 +341,9 @@ export default function EquipmentDetails() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.loadingText}>Loading equipment details...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading equipment details...</Text>
       </View>
     );
   }
@@ -311,27 +351,27 @@ export default function EquipmentDetails() {
   if (!equipment) return null;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]} edges={['top', 'left', 'right']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={22} color="#1F2937" />
+      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+          <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.brandTitle}>SUJATHA</Text>
-          <Text style={styles.headerSubtitle}>Asset Details</Text>
+          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Asset Details</Text>
         </View>
         <View style={styles.headerRight} />
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { backgroundColor: theme.colors.background }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Equipment Card */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.equipId}>{equipment.equipment_id}</Text>
+            <Text style={[styles.equipId, { color: theme.colors.primary, backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>{equipment.equipment_id}</Text>
             <TouchableOpacity
               style={[styles.badge, { backgroundColor: getStatusBgColor(equipment.status) }]}
               onPress={() => setShowStatusModal(true)}
@@ -342,83 +382,83 @@ export default function EquipmentDetails() {
               <Ionicons name="create-outline" size={14} color={getStatusColor(equipment.status)} style={{ marginLeft: 4 }} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.equipName}>{equipment.name}</Text>
+          <Text style={[styles.equipName, { color: theme.colors.text }]}>{equipment.name}</Text>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
           <View style={styles.infoGrid}>
             <View style={styles.infoRow}>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Section / System</Text>
-                <Text style={styles.value}>{equipment.section || 'N/A'}</Text>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Section / System</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.section || 'N/A'}</Text>
               </View>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Location</Text>
-                <Text style={styles.value}>{equipment.location || 'N/A'}</Text>
-              </View>
-            </View>
-
-            <View style={styles.infoRow}>
-              <View style={styles.infoCol}>
-                <Text style={styles.label}>Manufacturer</Text>
-                <Text style={styles.value}>{equipment.manufacturer || 'N/A'}</Text>
-              </View>
-              <View style={styles.infoCol}>
-                <Text style={styles.label}>Model</Text>
-                <Text style={styles.value}>{equipment.model_number || 'N/A'}</Text>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Location</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.location || 'N/A'}</Text>
               </View>
             </View>
 
             <View style={styles.infoRow}>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Serial Number</Text>
-                <Text style={styles.value}>{equipment.serial_number || 'N/A'}</Text>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Manufacturer</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.manufacturer || 'N/A'}</Text>
               </View>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Installation Date</Text>
-                <Text style={styles.value}>{equipment.installation_date || 'N/A'}</Text>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Model</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.model_number || 'N/A'}</Text>
               </View>
             </View>
 
-            <View style={[styles.infoRow, styles.maintenanceRow]}>
+            <View style={styles.infoRow}>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Last Routine</Text>
-                <View style={styles.dateBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#059669" />
-                  <Text style={[styles.value, styles.lastMaintenanceText]}>{lastMaintenance}</Text>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Serial Number</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.serial_number || 'N/A'}</Text>
+              </View>
+              <View style={styles.infoCol}>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Installation Date</Text>
+                <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.installation_date || 'N/A'}</Text>
+              </View>
+            </View>
+
+            <View style={[styles.infoRow, styles.maintenanceRow, { borderTopColor: theme.colors.border }]}>
+              <View style={styles.infoCol}>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Last Routine</Text>
+                <View style={[styles.dateBadge, { backgroundColor: theme.colors.background }]}>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
+                  <Text style={[styles.value, styles.lastMaintenanceText, { color: theme.colors.success }]}>{lastMaintenance}</Text>
                 </View>
               </View>
               <View style={styles.infoCol}>
-                <Text style={styles.label}>Next Routine</Text>
-                <View style={styles.dateBadge}>
-                  <Ionicons name="alert-circle" size={16} color="#DC2626" />
-                  <Text style={[styles.value, styles.nextMaintenanceText]}>{nextMaintenance}</Text>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Next Routine</Text>
+                <View style={[styles.dateBadge, { backgroundColor: theme.colors.background }]}>
+                  <Ionicons name="alert-circle" size={16} color={theme.colors.error} />
+                  <Text style={[styles.value, styles.nextMaintenanceText, { color: theme.colors.error }]}>{nextMaintenance}</Text>
                 </View>
               </View>
             </View>
           </View>
 
           <TouchableOpacity
-            style={styles.historyButton}
+            style={[styles.historyButton, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
             onPress={() => router.push({
               pathname: '/routine-history',
               params: { equipmentId: equipment.equipment_id, equipmentName: equipment.name }
             })}
           >
             <View style={styles.historyButtonContent}>
-              <Ionicons name="time-outline" size={18} color="#2563EB" />
-              <Text style={styles.historyButtonText}>View Full Routine History</Text>
+              <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
+              <Text style={[styles.historyButtonText, { color: theme.colors.primary }]}>View Full Routine History</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#2563EB" />
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Routines */}
-        <View style={styles.sectionCard}>
+        <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Routines</Text>
-            <View style={styles.sectionBadge}>
-              <Text style={styles.sectionBadgeText}>{schedules.length}</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Routines</Text>
+            <View style={[styles.sectionBadge, { backgroundColor: theme.colors.background }]}>
+              <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{schedules.length}</Text>
             </View>
           </View>
 
@@ -436,28 +476,28 @@ export default function EquipmentDetails() {
               const isToday = dateStr === curDateStr;
 
               return (
-                <View key={sched.id} style={styles.scheduleItem}>
+                <View key={sched.id} style={[styles.scheduleItem, { borderBottomColor: theme.colors.border }]}>
                   <View style={styles.scheduleInfo}>
                     <View style={styles.scheduleTypeContainer}>
                       <View style={[
                         styles.scheduleDot, 
-                        isOverdue ? styles.scheduleDotDue : (isFuture ? styles.scheduleDotFuture : { backgroundColor: '#F59E0B' })
+                        isOverdue ? { backgroundColor: theme.colors.error } : (isFuture ? { backgroundColor: theme.colors.success } : { backgroundColor: theme.colors.warning })
                       ]} />
-                      <Text style={styles.scheduleType}>{sched.schedule_type} Routine</Text>
+                      <Text style={[styles.scheduleType, { color: theme.colors.text }]}>{sched.schedule_type} Routine</Text>
                     </View>
-                    <Text style={[styles.scheduleDate, isOverdue && { color: '#EF4444', fontWeight: 'bold' }]}>
+                    <Text style={[styles.scheduleDate, { color: theme.colors.textSecondary }, isOverdue && { color: theme.colors.error, fontWeight: 'bold' }]}>
                       {isOverdue ? 'Overdue: ' : (isToday ? 'Due Today: ' : 'Next Due: ')}{dateStr}
                     </Text>
                     {isFuture && (
                       <View style={styles.lockBadge}>
-                        <Ionicons name="lock-closed" size={12} color="#9CA3AF" />
-                        <Text style={styles.lockText}>Available on {dateStr}</Text>
+                        <Ionicons name="checkmark-done" size={14} color={theme.colors.success} />
+                        <Text style={[styles.lockText, { color: theme.colors.textSecondary }]}>Completed (Next: {dateStr})</Text>
                       </View>
                     )}
                   </View>
+                  {(!sched.task_count || sched.task_count === 0) ? null : (
                   <TouchableOpacity
-                    style={[styles.executeButton, isFuture && styles.executeButtonDisabled]}
-                    disabled={isFuture}
+                    style={[styles.executeButton, isFuture && styles.executeButtonCompleted]}
                     onPress={() => router.push({
                       pathname: '/routine-execute',
                       params: {
@@ -468,15 +508,16 @@ export default function EquipmentDetails() {
                       }
                     })}
                   >
-                    <Text style={[styles.executeButtonText, isFuture && styles.executeButtonTextDisabled]}>
-                      {isFuture ? 'Locked' : 'Execute'}
+                    <Text style={[styles.executeButtonText, isFuture && styles.executeButtonTextCompleted]}>
+                      {isFuture ? 'Completed' : 'Execute'}
                     </Text>
                     <Ionicons
-                      name={isFuture ? "lock-closed" : "arrow-forward"}
-                      size={14}
-                      color={isFuture ? "#9CA3AF" : "#FFFFFF"}
+                      name={isFuture ? "checkmark-outline" : "arrow-forward"}
+                      size={16}
+                      color={isFuture ? theme.colors.success : "#FFFFFF"}
                     />
                   </TouchableOpacity>
+                  )}
                 </View>
               );
             })
@@ -484,38 +525,38 @@ export default function EquipmentDetails() {
         </View>
 
         {/* Linked Spare Parts */}
-        <View style={styles.sectionCard}>
+        <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderTitleRow}>
-              <Text style={styles.sectionTitle}>Linked Spare Parts</Text>
-              <View style={styles.sectionBadge}>
-                <Text style={styles.sectionBadgeText}>{spares.length}</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Linked Spare Parts</Text>
+              <View style={[styles.sectionBadge, { backgroundColor: theme.colors.background }]}>
+                <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{spares.length}</Text>
               </View>
             </View>
             <TouchableOpacity
-              style={styles.linkSpareActionBtn}
+              style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
               onPress={loadAvailableSpares}
             >
-              <Ionicons name="add" size={16} color="#2563EB" />
-              <Text style={styles.linkSpareActionText}>Link Spare</Text>
+              <Ionicons name="add" size={16} color={theme.colors.primary} />
+              <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Link Spare</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.actionButtons}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.defectButton]}
+              style={[styles.actionButton, styles.defectButton, { backgroundColor: theme.dark ? '#450a0a' : '#FEF2F2', borderColor: theme.dark ? '#7f1d1d' : '#FEE2E2' }]}
               onPress={() => setShowDefectModal(true)}
             >
-              <Ionicons name="warning-outline" size={18} color="#EF4444" />
-              <Text style={styles.defectButtonText}>Report Issue</Text>
+              <Ionicons name="warning-outline" size={18} color={theme.colors.error} />
+              <Text style={[styles.defectButtonText, { color: theme.colors.error }]}>Report Issue</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionButton, styles.statusButton]}
+              style={[styles.actionButton, styles.statusButton, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
               onPress={() => setShowStatusModal(true)}
             >
-              <Ionicons name="options-outline" size={18} color="#2563EB" />
-              <Text style={styles.statusButtonText}>Update Status</Text>
+              <Ionicons name="options-outline" size={18} color={theme.colors.primary} />
+              <Text style={[styles.statusButtonText, { color: theme.colors.primary }]}>Update Status</Text>
             </TouchableOpacity>
           </View>
 
@@ -533,30 +574,38 @@ export default function EquipmentDetails() {
                 (spare.available_quantity <= spare.minimum_quantity ? '#F59E0B' : '#10B981');
 
               return (
-                <View key={spare.id} style={styles.spareItem}>
+                <View key={spare.id} style={[styles.spareItem, { borderBottomColor: theme.colors.border }]}>
                   <View style={styles.spareInfo}>
-                    <Text style={styles.spareName}>{spare.name}</Text>
+                    <Text style={[styles.spareName, { color: theme.colors.text }]}>{spare.name}</Text>
                     <View style={styles.spareMeta}>
-                      <Text style={styles.sparePartNumber}>P/N: {spare.part_number}</Text>
-                      <View style={[styles.stockBadge, { backgroundColor: `${statusColor}15` }]}>
+                      <Text style={[styles.sparePartNumber, { color: theme.colors.textSecondary }]}>P/N: {spare.part_number}</Text>
+                      <View style={[styles.stockBadge, { backgroundColor: `${statusColor}25` }]}>
                         <View style={[styles.stockDot, { backgroundColor: statusColor }]} />
                         <Text style={[styles.stockText, { color: statusColor }]}>{stockStatus}</Text>
                       </View>
                     </View>
-                    <Text style={styles.spareQuantity}>Available: {spare.available_quantity} units</Text>
+                    <Text style={[styles.spareQuantity, { color: theme.colors.textSecondary }]}>Available: {spare.available_quantity} units</Text>
                     {spare.available_quantity <= spare.minimum_quantity && (
-                      <Text style={styles.minimumText}>Min. required: {spare.minimum_quantity}</Text>
+                      <Text style={[styles.minimumText, { color: theme.colors.warning }]}>Min. required: {spare.minimum_quantity}</Text>
+                    )}
+                  </View>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <View style={[styles.stockBadge, { backgroundColor: theme.colors.background }]}>
+                      <Text style={[styles.stockText, { color: theme.colors.textSecondary }]}>{spare.available_quantity} in stock</Text>
+                    </View>
+                    {spare.linked_by && (
+                      <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>Linked by: {spare.linked_by}</Text>
                     )}
                   </View>
                   <TouchableOpacity
-                    style={[styles.useButton, isDepleted && styles.useButtonDisabled]}
+                    style={[styles.useButton, { backgroundColor: theme.colors.success }, isDepleted && styles.useButtonDisabled]}
                     disabled={isDepleted}
                     onPress={() => {
                       setSelectedSpare(spare);
                       setShowUsageModal(true);
                     }}
                   >
-                    <Ionicons name="swap-vertical" size={16} color={isDepleted ? "#9CA3AF" : "#FFFFFF"} />
+                    <Ionicons name="swap-vertical" size={16} color={isDepleted ? theme.colors.textSecondary : "#FFFFFF"} />
                     <Text style={[styles.useButtonText, isDepleted && styles.useButtonTextDisabled]}>Use</Text>
                   </TouchableOpacity>
                 </View>
@@ -564,43 +613,74 @@ export default function EquipmentDetails() {
             })
           )}
         </View>
+
+        {/* Usage History */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Usage History</Text>
+            <View style={[styles.sectionBadge, { backgroundColor: theme.colors.background }]}>
+              <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{usageHistory.length}</Text>
+            </View>
+          </View>
+
+          {usageHistory.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="receipt-outline" size={32} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No consumption history found.</Text>
+            </View>
+          ) : (
+            usageHistory.map(record => (
+              <View key={record.id} style={[styles.historyRow, { borderBottomColor: theme.colors.border }]}>
+                <View style={styles.historyInfo}>
+                  <Text style={[styles.historySpareName, { color: theme.colors.text }]}>{record.spare_name}</Text>
+                  <Text style={[styles.historyDetail, { color: theme.colors.textSecondary }]}>
+                    {record.quantity_used} unit(s) • {record.maintainer_name}
+                  </Text>
+                </View>
+                <Text style={[styles.historyDate, { color: theme.colors.textSecondary }]}>
+                  {record.used_date.split(' ')[0]}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
 
       {/* Usage Modal */}
       <Modal visible={showUsageModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Record Usage</Text>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Record Usage</Text>
               <TouchableOpacity onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); }}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             {selectedSpare && (
-              <Text style={styles.modalSub}>
-                Consuming <Text style={styles.modalHighlight}>{selectedSpare.name}</Text> for {equipment?.name}
+              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
+                Consuming <Text style={[styles.modalHighlight, { color: theme.colors.primary }]}>{selectedSpare.name}</Text> for {equipment?.name}
               </Text>
             )}
 
             <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Quantity (Max: {selectedSpare?.available_quantity})</Text>
+              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Quantity (Max: {selectedSpare?.available_quantity})</Text>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                 value={useQuantity}
                 onChangeText={setUseQuantity}
                 keyboardType="number-pad"
                 placeholder="Enter quantity"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textSecondary}
               />
             </View>
 
             <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Maintainer Name</Text>
+              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Maintainer Name</Text>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="Enter your name"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={useMaintainer}
                 onChangeText={setUseMaintainer}
               />
@@ -608,10 +688,10 @@ export default function EquipmentDetails() {
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.modalBtnCancel}
+                style={[styles.modalBtnCancel, { backgroundColor: theme.colors.background }]}
                 onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); }}
               >
-                <Text style={styles.modalBtnCancelText}>Cancel</Text>
+                <Text style={[styles.modalBtnCancelText, { color: theme.colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleUseSpare}>
                 <Text style={styles.modalBtnSubmitText}>Withdraw Stock</Text>
@@ -624,15 +704,15 @@ export default function EquipmentDetails() {
       {/* Assign Spare Modal */}
       <Modal visible={showAssignModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.assignModalContent]}>
+          <View style={[styles.modalContent, styles.assignModalContent, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Assign Spare Part</Text>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Assign Spare Part</Text>
               <TouchableOpacity onPress={() => setShowAssignModal(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSub}>Select a spare part to link with this equipment</Text>
+            <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Select a spare part to link with this equipment</Text>
 
             <ScrollView style={styles.assignList} showsVerticalScrollIndicator={false}>
               {availableSpares.length === 0 ? (
@@ -641,21 +721,29 @@ export default function EquipmentDetails() {
                   <Text style={styles.emptyAssignText}>No available spares to assign</Text>
                 </View>
               ) : (
-                availableSpares.map((sp) => (
-                  <TouchableOpacity
-                    key={sp.id}
-                    style={styles.assignItem}
-                    onPress={() => handleAssignSpare(sp.id)}
-                  >
-                    <View style={styles.assignItemInfo}>
-                      <Text style={styles.assignItemName}>{sp.name}</Text>
-                      <Text style={styles.assignItemPart}>P/N: {sp.part_number}</Text>
-                      <Text style={styles.assignItemQty}>Available: {sp.available_quantity}</Text>
+                availableSpares.map(spare => (
+                  <View key={spare.id} style={[styles.spareAssignRow, { borderBottomColor: theme.colors.border }]}>
+                    <View style={{flex: 1}}>
+                      <Text style={[styles.assignSpareName, { color: theme.colors.text }]}>{spare.name}</Text>
+                      <Text style={[styles.assignSpareDetail, { color: theme.colors.textSecondary }]}>{spare.part_number} • {spare.available_quantity} in stock</Text>
+                      <TextInput 
+                        style={{
+                          backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, 
+                          borderRadius: 8, padding: 8, fontSize: 13, marginTop: 8, color: theme.colors.text
+                        }}
+                        placeholder="Maintainer Name (Linked By)"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={linkMaintainerName}
+                        onChangeText={setLinkMaintainerName}
+                      />
                     </View>
-                    <View style={styles.assignItemAdd}>
-                      <Ionicons name="add-circle" size={28} color="#2563EB" />
-                    </View>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.addSpareBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
+                      onPress={() => handleAssignSpare(spare.id)}
+                    >
+                      <Text style={[styles.addSpareBtnText, { color: theme.colors.primary }]}>Link & Use 1</Text>
+                    </TouchableOpacity>
+                  </View>
                 ))
               )}
             </ScrollView>
@@ -666,30 +754,30 @@ export default function EquipmentDetails() {
       {/* Defect Reporting Modal */}
       <Modal visible={showDefectModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.defectModalContent}>
+          <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Report Defect</Text>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Report Defect</Text>
               <TouchableOpacity onPress={() => setShowDefectModal(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalSub}>
-              Report an issue with <Text style={styles.modalHighlight}>{equipment?.name}</Text>
+            <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
+              Report an issue with <Text style={[styles.modalHighlight, { color: theme.colors.primary }]}>{equipment?.name}</Text>
             </Text>
 
             <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Issue Title</Text>
+              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Issue Title</Text>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="e.g. Unusual noise from motor"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={defectForm.title}
                 onChangeText={t => setDefectForm(f => ({ ...f, title: t }))}
               />
             </View>
 
             <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Priority</Text>
+              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Priority</Text>
               <View style={styles.priorityContainer}>
                 {['Low', 'Medium', 'High', 'Critical'].map(p => (
                   <TouchableOpacity
@@ -711,11 +799,22 @@ export default function EquipmentDetails() {
             </View>
 
             <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Detailed Description</Text>
+              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Reported By *</Text>
               <TextInput
-                style={[styles.modalInput, styles.textArea]}
+                style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                placeholder="Enter your name"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={defectForm.reportedBy}
+                onChangeText={t => setDefectForm(f => ({ ...f, reportedBy: t }))}
+              />
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Detailed Description</Text>
+              <TextInput
+                style={[styles.modalInput, styles.textArea, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="Describe the problem in detail..."
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textSecondary}
                 multiline
                 numberOfLines={4}
                 value={defectForm.description}
@@ -739,14 +838,14 @@ export default function EquipmentDetails() {
       {/* Status Update Modal */}
       <Modal visible={showStatusModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Update Status</Text>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Update Status</Text>
               <TouchableOpacity onPress={() => setShowStatusModal(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalSub}>Change operational status for {equipment?.name}</Text>
+            <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Change operational status for {equipment?.name}</Text>
 
             <View style={styles.statusOptions}>
               {['Active', 'Under Maintenance', 'Inactive'].map((status) => (
@@ -762,13 +861,14 @@ export default function EquipmentDetails() {
                     <View style={[styles.statusOptionDot, { backgroundColor: getStatusColor(status) }]} />
                     <Text style={[
                       styles.statusOptionText,
-                      tempStatus === status && styles.statusOptionTextActive
+                      { color: theme.colors.text },
+                      tempStatus === status && [styles.statusOptionTextActive, { color: theme.colors.primary }]
                     ]}>
                       {status}
                     </Text>
                   </View>
                   {tempStatus === status && (
-                    <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
+                    <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -1093,18 +1193,18 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     gap: 6
   },
-  executeButtonDisabled: {
-    backgroundColor: '#F3F4F6',
+  executeButtonCompleted: {
+    backgroundColor: '#D1FAE5',
     borderWidth: 1,
-    borderColor: '#E5E7EB'
+    borderColor: '#A7F3D0'
   },
   executeButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 13
   },
-  executeButtonTextDisabled: {
-    color: '#9CA3AF'
+  executeButtonTextCompleted: {
+    color: '#059669'
   },
   actionButtons: {
     flexDirection: 'row',
@@ -1146,6 +1246,29 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6'
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  historyInfo: {
+    flex: 1
+  },
+  historySpareName: {
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  historyDetail: {
+    fontSize: 12,
+    marginTop: 2
+  },
+  historyDate: {
+    fontSize: 12,
+    fontWeight: '500'
   },
   spareInfo: {
     flex: 1,
@@ -1346,8 +1469,35 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: '500'
   },
-  assignItemAdd: {
-    padding: 4
+  spareAssignRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  assignSpareName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4
+  },
+  assignSpareDetail: {
+    fontSize: 13,
+    color: '#6B7280'
+  },
+  addSpareBtn: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  addSpareBtnText: {
+    color: '#2563EB',
+    fontWeight: '600',
+    fontSize: 13
   },
   defectModalContent: {
     backgroundColor: '#FFFFFF',

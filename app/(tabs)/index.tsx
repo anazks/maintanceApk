@@ -4,7 +4,6 @@ import React, { useRef } from 'react';
 import {
   Animated,
   Dimensions,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,6 +11,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -77,20 +79,22 @@ interface ActivityItem {
 }
 
 function StatCard({ item, index }: { item: StatItem, index: number }) {
+  const { theme } = useTheme();
   return (
-    <View style={styles.statCard}>
+    <View style={[styles.statCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
       <View style={styles.statHeader}>
-        <Ionicons name={item.icon as any} size={16} color="#6B7280" />
+        <Ionicons name={item.icon as any} size={16} color={theme.colors.textSecondary} />
         <Text style={styles.statChange}>{item.change}</Text>
       </View>
-      <Text style={styles.statValue}>{item.value}</Text>
-      <Text style={styles.statLabel}>{item.label}</Text>
+      <Text style={[styles.statValue, { color: theme.colors.text }]}>{item.value}</Text>
+      <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{item.label}</Text>
     </View>
   );
 }
 
 function MenuCard({ item, index }: { item: any, index: number }) {
   const router = useRouter();
+  const { theme } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -112,26 +116,33 @@ function MenuCard({ item, index }: { item: any, index: number }) {
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={styles.menuCard}
+        style={[styles.menuCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
         onPress={() => router.push(item.route)}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.9}
       >
         <View style={styles.menuCardLeft}>
-          <View style={styles.iconBox}>
-            <Ionicons name={item.icon} size={22} color="#2563EB" />
+          <View style={[styles.iconBox, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}>
+            <Ionicons name={item.icon} size={22} color={theme.colors.primary} />
           </View>
           <View style={styles.menuText}>
-            <Text style={styles.menuTitle}>{item.title}</Text>
-            <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+            <Text style={[styles.menuTitle, { color: theme.colors.text }]}>{item.title}</Text>
+            <Text style={[styles.menuSubtitle, { color: theme.colors.textSecondary }]}>{item.subtitle}</Text>
           </View>
         </View>
 
-        {/* Visual indicators that this is clickable */}
-        <View style={styles.actionIndicator}>
-          <Ionicons name="chevron-forward" size={18} color="#2563EB" />
-          <View style={styles.pressHint} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {item.badge ? (
+            <View style={styles.menuBadge}>
+              <Text style={styles.menuBadgeText}>{item.badge}</Text>
+            </View>
+          ) : null}
+          {/* Visual indicators that this is clickable */}
+          <View style={[styles.actionIndicator, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
+            <View style={[styles.pressHint, { backgroundColor: theme.colors.primary }]} />
+          </View>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -139,19 +150,20 @@ function MenuCard({ item, index }: { item: any, index: number }) {
 }
 
 function ActivityCard({ item }: { item: ActivityItem }) {
+  const { theme } = useTheme();
   return (
-    <View style={styles.activityCard}>
+    <View style={[styles.activityCard, { borderBottomColor: theme.colors.border }]}>
       <View style={styles.activityLeft}>
         <View style={[
           styles.activityDot,
-          { backgroundColor: item.status === 'completed' ? '#10B981' : '#F59E0B' }
+          { backgroundColor: item.status === 'completed' ? theme.colors.success : theme.colors.warning }
         ]} />
         <View>
-          <Text style={styles.activityAction}>{item.action}</Text>
-          <Text style={styles.activityItem}>{item.item}</Text>
+          <Text style={[styles.activityAction, { color: theme.colors.text }]}>{item.action}</Text>
+          <Text style={[styles.activityItem, { color: theme.colors.textSecondary }]}>{item.item}</Text>
         </View>
       </View>
-      <Text style={styles.activityTime}>{item.time}</Text>
+      <Text style={[styles.activityTime, { color: theme.colors.textSecondary }]}>{item.time}</Text>
     </View>
   );
 }
@@ -161,9 +173,12 @@ import { getDB } from '../../database';
 
 export default function Index() {
   const router = useRouter();
+  const { theme, isDarkMode } = useTheme();
+  const { user } = useAuth();
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const isAdmin = user?.role === 'Admin';
 
   const [stats, setStats] = React.useState<StatItem[]>([
     { label: 'Total Equipment', value: '0', change: '0', icon: 'layers-outline' },
@@ -175,6 +190,7 @@ export default function Index() {
   const [activities, setActivities] = React.useState<ActivityItem[]>([]);
   const [deficientParts, setDeficientParts] = React.useState(0);
   const [openDefectsCount, setOpenDefectsCount] = React.useState(0);
+  const [overdueRoutinesCount, setOverdueRoutinesCount] = React.useState(0);
   const [menuItems, setMenuItems] = React.useState(DEFAULT_MENU_ITEMS);
 
   useFocusEffect(
@@ -193,7 +209,16 @@ export default function Index() {
       const totalParts = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Spare_Parts')?.count || 0;
       const defParts = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Spare_Parts WHERE available_quantity <= minimum_quantity')?.count || 0;
       
+      const todayShort = new Date().toISOString().split('T')[0];
+      const overdueRoutines = db.getFirstSync<{count: number}>(`
+        SELECT COUNT(ms.id) as count 
+        FROM Maintenance_Schedule ms
+        LEFT JOIN Checklist_Items ci ON ms.id = ci.schedule_id
+        WHERE date(ms.next_maintenance) <= date(?) AND ci.id IS NOT NULL
+      `, [todayShort])?.count || 0;
+      
       setDeficientParts(defParts);
+      setOverdueRoutinesCount(overdueRoutines);
 
       // Update Menu Items with real counts
       setMenuItems((prev: any[]) => prev.map((item: any) => {
@@ -206,10 +231,10 @@ export default function Index() {
         if (item.key === 'defect') {
           const openDefects = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Defects WHERE status="Open"')?.count || 0;
           setOpenDefectsCount(openDefects);
-          return { ...item, subtitle: `${openDefects} open reports` };
+          return { ...item, subtitle: `${openDefects} open reports`, badge: openDefects > 0 ? openDefects : undefined };
         }
         if (item.key === 'parts') {
-          return { ...item, subtitle: `${totalParts} items in stock` };
+          return { ...item, subtitle: `${totalParts} items in stock`, badge: defParts > 0 ? defParts : undefined };
         }
         return item;
       }));
@@ -245,69 +270,88 @@ export default function Index() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { backgroundColor: theme.colors.background }]}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
           <View>
-            <Text style={styles.brandName}>SUJATHA</Text>
-            <Text style={styles.greeting}>{greeting}, Inspector</Text>
+            <Text style={[styles.brandName, { color: theme.colors.primary }]}>SUJATHA</Text>
+            <Text style={[styles.greeting, { color: theme.colors.textSecondary }]}>
+              {greeting}, {user?.username || 'User'} ({user?.role || 'Staff'})
+            </Text>
           </View>
-          <TouchableOpacity style={styles.avatarBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={[styles.avatarBtn, { backgroundColor: theme.colors.surface }]} activeOpacity={0.7}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={20} color="#2563EB" />
+              <Ionicons name="person" size={20} color={theme.colors.primary} />
             </View>
           </TouchableOpacity>
         </View>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          {stats.map((stat, index) => (
-            <StatCard key={stat.label} item={stat} index={index} />
-          ))}
-        </View>
+        {isAdmin && (
+          <>
+            {/* Stats Grid */}
+            <View style={styles.statsGrid}>
+              {stats.map((stat, index) => (
+                <StatCard key={stat.label} item={stat} index={index} />
+              ))}
+            </View>
 
-        {deficientParts > 0 && (
-          <TouchableOpacity 
-            style={styles.alertBanner}
-            onPress={() => router.push('/parts')}
-          >
-            <Ionicons name="warning" size={20} color="#991B1B" />
-            <Text style={styles.alertText}>
-              <Text style={{ fontWeight: '700' }}>{deficientParts} parts</Text> require restocking. Tap to view inventory.
-            </Text>
-          </TouchableOpacity>
-        )}
+            {deficientParts > 0 && (
+              <TouchableOpacity 
+                style={[styles.alertBanner, { backgroundColor: theme.dark ? '#450a0a' : '#FEE2E2', borderColor: theme.dark ? '#7f1d1d' : '#FCA5A5' }]}
+                onPress={() => router.push('/parts')}
+              >
+                <Ionicons name="warning" size={20} color={theme.dark ? '#f87171' : '#991B1B'} />
+                <Text style={[styles.alertText, { color: theme.dark ? '#fecaca' : '#991B1B' }]}>
+                  <Text style={{ fontWeight: '700' }}>{deficientParts} parts</Text> require restocking. Tap to view inventory.
+                </Text>
+              </TouchableOpacity>
+            )}
 
-        {openDefectsCount > 0 && (
-          <TouchableOpacity 
-            style={[styles.alertBanner, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}
-            onPress={() => router.push('/report')}
-          >
-            <Ionicons name="alert-circle" size={20} color="#C2410C" />
-            <Text style={[styles.alertText, { color: '#C2410C' }]}>
-              <Text style={{ fontWeight: '700' }}>{openDefectsCount} defects</Text> reported and pending resolution.
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color="#C2410C" />
-          </TouchableOpacity>
+            {overdueRoutinesCount > 0 && (
+              <TouchableOpacity 
+                style={[styles.alertBanner, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}
+                onPress={() => router.push('/routines')}
+              >
+                <Ionicons name="time" size={20} color="#DC2626" />
+                <Text style={[styles.alertText, { color: '#DC2626' }]}>
+                  <Text style={{ fontWeight: '700' }}>{overdueRoutinesCount} routines</Text> are overdue or due today!
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#DC2626" />
+              </TouchableOpacity>
+            )}
+
+            {openDefectsCount > 0 && (
+              <TouchableOpacity 
+                style={[styles.alertBanner, { backgroundColor: theme.dark ? '#431407' : '#FFF7ED', borderColor: theme.dark ? '#7c2d12' : '#FED7AA' }]}
+                onPress={() => router.push('/report')}
+              >
+                <Ionicons name="alert-circle" size={20} color={theme.dark ? '#fb923c' : '#C2410C'} />
+                <Text style={[styles.alertText, { color: theme.dark ? '#ffedd5' : '#C2410C' }]}>
+                  <Text style={{ fontWeight: '700' }}>{openDefectsCount} defects</Text> reported and pending resolution.
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.dark ? '#fb923c' : '#C2410C'} />
+              </TouchableOpacity>
+            )}
+          </>
         )}
 
         {/* Quick Actions Label with Action Hint */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
-            <View style={styles.actionChip}>
-              <Ionicons name="hand-right-outline" size={14} color="#2563EB" />
-              <Text style={styles.actionChipText}>Tap to navigate</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Quick Actions</Text>
+            <View style={[styles.actionChip, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+              <Ionicons name="hand-right-outline" size={14} color={theme.colors.primary} />
+              <Text style={[styles.actionChipText, { color: theme.colors.primary }]}>Tap to navigate</Text>
             </View>
           </View>
           <TouchableOpacity activeOpacity={0.7}>
-            <Text style={styles.viewAllText}>View All</Text>
+            <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>View All</Text>
           </TouchableOpacity>
         </View>
 
@@ -318,35 +362,39 @@ export default function Index() {
           ))}
         </View>
 
-        {/* Recent Activity */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Routine Logs</Text>
-          <TouchableOpacity activeOpacity={0.7}>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.activityList}>
-          {activities.length > 0 ? activities.map((activity) => (
-            <ActivityCard key={activity.id} item={activity} />
-          )) : <Text style={{textAlign: 'center', color: '#6B7280'}}>No recent routine records.</Text>}
-        </View>
-
-        {/* Footer Metrics */}
-        <View style={styles.footerMetrics}>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>SUJATHA Status</Text>
-            <View style={styles.metricValueRow}>
-              <View style={styles.statusDot} />
-              <Text style={styles.metricValue}>System Operational</Text>
+        {isAdmin && (
+          <>
+            {/* Recent Activity */}
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Recent Routine Logs</Text>
+              <TouchableOpacity activeOpacity={0.7}>
+                <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>View All</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metricItem}>
-            <Text style={styles.metricValue}>{stats[2]?.value || '0'}</Text>
-            <Text style={styles.metricLabel}>Pending Routines</Text>
-          </View>
-        </View>
+
+            <View style={[styles.activityList, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              {activities.length > 0 ? activities.map((activity) => (
+                <ActivityCard key={activity.id} item={activity} />
+              )) : <Text style={{textAlign: 'center', color: theme.colors.textSecondary}}>No recent routine records.</Text>}
+            </View>
+
+            {/* Footer Metrics */}
+            <View style={[styles.footerMetrics, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricLabel, { color: theme.colors.textSecondary }]}>SUJATHA Status</Text>
+                <View style={styles.metricValueRow}>
+                  <View style={[styles.statusDot, { backgroundColor: theme.colors.success }]} />
+                  <Text style={[styles.metricValue, { color: theme.colors.text }]}>System Operational</Text>
+                </View>
+              </View>
+              <View style={[styles.metricDivider, { backgroundColor: theme.colors.border }]} />
+              <View style={styles.metricItem}>
+                <Text style={[styles.metricValue, { color: theme.colors.text }]}>{stats[2]?.value || '0'}</Text>
+                <Text style={[styles.metricLabel, { color: theme.colors.textSecondary }]}>Pending Routines</Text>
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -569,6 +617,20 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#2563EB',
     opacity: 0.1,
+  },
+  menuBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   // Activity List

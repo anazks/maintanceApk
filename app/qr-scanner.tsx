@@ -11,8 +11,10 @@ import {
   View,
 } from 'react-native';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 export default function QRScanner() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
@@ -59,19 +61,19 @@ export default function QRScanner() {
 
   if (hasPermission === null) {
     return (
-      <View style={styles.centerParams}>
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={{ marginTop: 12 }}>Requesting camera permission...</Text>
+      <View style={[styles.centerParams, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 12, color: theme.colors.text }}>Requesting camera permission...</Text>
       </View>
     );
   }
   
   if (hasPermission === false) {
     return (
-      <View style={styles.centerParams}>
-        <Ionicons name="camera-outline" size={64} color="#9CA3AF" />
-        <Text style={styles.errorText}>No access to camera.</Text>
-        <TouchableOpacity style={styles.backButtonCenter} onPress={() => router.back()}>
+      <View style={[styles.centerParams, { backgroundColor: theme.colors.background }]}>
+        <Ionicons name="camera-outline" size={64} color={theme.colors.textSecondary} />
+        <Text style={[styles.errorText, { color: theme.colors.text }]}>No access to camera.</Text>
+        <TouchableOpacity style={[styles.backButtonCenter, { backgroundColor: theme.colors.primary }]} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -121,8 +123,8 @@ export default function QRScanner() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  centerParams: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB', padding: 20 },
+  container: { flex: 1 },
+  centerParams: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   errorText: { fontSize: 16, color: '#374151', marginVertical: 16 },
   backButtonCenter: { backgroundColor: '#2563EB', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   backButtonText: { color: '#FFFFFF', fontWeight: '600' },

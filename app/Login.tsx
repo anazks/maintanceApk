@@ -1,6 +1,10 @@
 import { router } from 'expo-router';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { getDB } from '../database';
 import React, { useState } from 'react';
 import {
+  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -17,18 +21,46 @@ import {
 const { height } = Dimensions.get('window');
 
 export default function Login() {
+  const { theme, isDarkMode } = useTheme();
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const handleLogin = () => {
-    console.log('Login attempt:', { username, password });
+  const handleLogin = async () => {
+    if (!username.trim() || !password.trim()) return;
+    
+    setIsLoggingIn(true);
+    try {
+      const db = getDB();
+      const user = db.getFirstSync<{ id: number; username: string; password: string; role: string }>(
+        'SELECT * FROM Users WHERE username = ?',
+        [username.trim()]
+      );
+
+      if (user && user.password === password) {
+        await login({
+          id: user.id,
+          username: user.username,
+          role: user.role as 'Admin' | 'Staff'
+        });
+        router.replace('/(tabs)');
+      } else {
+        Alert.alert('Login Failed', 'Invalid username or password');
+      }
+    } catch (e) {
+      console.error('Login error:', e);
+      Alert.alert('Error', 'An error occurred during login');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
-  const isFormValid = username.trim() !== '' && password.trim() !== '';
+  const isFormValid = username.trim() !== '' && password.trim() !== '' && !isLoggingIn;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f1e3a" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -40,19 +72,19 @@ export default function Login() {
         >
           <View style={styles.innerContainer}>
             {/* App Name */}
-            <Text style={styles.appTitle}>SUJATHA</Text>
-            <Text style={styles.appSubtitle}>Naval Operations</Text>
+            <Text style={[styles.appTitle, { color: theme.colors.primary }]}>SUJATHA</Text>
+            <Text style={[styles.appSubtitle, { color: theme.colors.textSecondary }]}>Naval Operations</Text>
 
             {/* Login Form */}
-            <View style={styles.form}>
-              <Text style={styles.title}>Sign In</Text>
+            <View style={[styles.form, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <Text style={[styles.title, { color: theme.colors.text }]}>Sign In</Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Username</Text>
+                <Text style={[styles.label, { color: theme.colors.text }]}>Username</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                   placeholder="Enter username"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={username}
                   onChangeText={setUsername}
                   autoCapitalize="none"
@@ -61,11 +93,11 @@ export default function Login() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password</Text>
+                <Text style={[styles.label, { color: theme.colors.text }]}>Password</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                   placeholder="Enter password"
-                  placeholderTextColor="#999"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={true}
@@ -74,31 +106,34 @@ export default function Login() {
               </View>
 
               <TouchableOpacity style={styles.forgotPassword}>
-                <Text style={styles.forgotText}>Forgot password?</Text>
+                <Text style={[styles.forgotText, { color: theme.colors.primary }]}>Forgot password?</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
                   styles.loginButton,
-                  !isFormValid && styles.loginButtonDisabled,
+                  { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+                  !isFormValid && [styles.loginButtonDisabled, { backgroundColor: theme.colors.border, borderColor: theme.colors.border }],
                 ]}
-                onPress={() => router.push('/(tabs)')}
+                onPress={handleLogin}
                 disabled={!isFormValid}
                 activeOpacity={0.8}
               >
-                <Text style={styles.buttonText}>LOGIN</Text>
+                <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
+                  {isLoggingIn ? 'LOGGING IN...' : 'LOGIN'}
+                </Text>
               </TouchableOpacity>
 
               <View style={styles.registerContainer}>
-                <Text style={styles.registerText}>New to SUJATHA? </Text>
+                <Text style={[styles.registerText, { color: theme.colors.textSecondary }]}>Logged-in as staff? </Text>
                 <TouchableOpacity>
-                  <Text style={styles.registerLink}>Register</Text>
+                  <Text style={[styles.registerLink, { color: theme.colors.primary }]}>Help</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Footer */}
-            <Text style={styles.footerText}>
+            <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
               Naval Inventory System • v1.0
             </Text>
           </View>
@@ -111,7 +146,6 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a1d37', // Solid dark navy background
   },
   keyboardView: {
     flex: 1,
@@ -128,30 +162,25 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 48,
     fontWeight: '800',
-    color: '#ffffff',
     textAlign: 'center',
     letterSpacing: 4,
     marginBottom: 4,
   },
   appSubtitle: {
     fontSize: 16,
-    color: '#a0c4ff',
     textAlign: 'center',
     letterSpacing: 1,
     marginBottom: 48,
     textTransform: 'uppercase',
   },
   form: {
-    backgroundColor: '#1e3456', // Solid slightly lighter navy
     borderRadius: 12,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#2e4466',
   },
   title: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#ffffff',
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -159,20 +188,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    color: '#c0d4ff',
     fontSize: 14,
     marginBottom: 6,
     fontWeight: '500',
   },
   input: {
-    backgroundColor: '#2a4062',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: 'white',
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#3a5072',
   },
   forgotPassword: {
     alignSelf: 'flex-end',
@@ -180,24 +205,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   forgotText: {
-    color: '#90caf9',
     fontSize: 13,
   },
   loginButton: {
-    backgroundColor: '#1e6ae5',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#3e7af5',
   },
   loginButtonDisabled: {
-    backgroundColor: '#2a4072',
-    borderColor: '#3a5082',
   },
   buttonText: {
-    color: 'white',
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 1,
@@ -209,16 +228,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   registerText: {
-    color: '#a0b4d0',
     fontSize: 14,
   },
   registerLink: {
-    color: '#90caf9',
     fontSize: 14,
     fontWeight: '600',
   },
   footerText: {
-    color: '#7088a8',
     fontSize: 12,
     textAlign: 'center',
     marginTop: 40,

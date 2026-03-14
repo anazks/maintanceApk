@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 interface RoutineTask {
   id: number;
@@ -22,9 +23,11 @@ interface RoutineTask {
   last_completed_date?: string;
   status: string;
   description: string;
+  hasChecklist: boolean;
 }
 
 export default function Maintenance() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [tasks, setTasks] = useState<RoutineTask[]>([]);
@@ -45,17 +48,14 @@ export default function Maintenance() {
           ms.next_maintenance,
           e.name as equipment_name, 
           e.equipment_id as equipment_ref,
+          (SELECT COUNT(*) FROM Checklist_Items ci WHERE ci.schedule_id = ms.id) as checklist_count,
           (SELECT MAX(maintenance_date) FROM Maintenance_Log ml WHERE ml.equipment_id = e.id AND ml.schedule_type = ms.schedule_type AND ml.status = 'Completed') as last_completed
         FROM Maintenance_Schedule ms
         JOIN Equipment e ON ms.equipment_id = e.id
       `);
 
       const formattedTasks = allSchedules.map(task => {
-        // Find if they have any assigned checklists
-        const checklistsCount = db.getFirstSync<{count: number}>(
-          'SELECT COUNT(*) as count FROM Checklist_Items WHERE schedule_id = ?', 
-          [task.id]
-        );
+        const checklistCount = task.checklist_count || 0;
 
         let currentStatus = 'Pending';
         let formattedDate = 'Unscheduled';
@@ -73,6 +73,11 @@ export default function Maintenance() {
           }
         }
 
+        // If no checklist is configured, mark as Incomplete Config
+        if (checklistCount === 0) {
+          currentStatus = 'Incomplete';
+        }
+
         return {
           id: task.id,
           equipment_name: task.equipment_name,
@@ -81,7 +86,8 @@ export default function Maintenance() {
           scheduled_date: formattedDate,
           last_completed_date: task.last_completed ? task.last_completed.split(' ')[0] : undefined,
           status: currentStatus,
-          description: checklistsCount?.count ? `${checklistsCount.count} checklist items to complete` : 'No checklist items configured.',
+          description: checklistCount > 0 ? `${checklistCount} checklist items to complete` : 'No checklist items configured.',
+          hasChecklist: checklistCount > 0,
         };
       });
 
@@ -93,7 +99,7 @@ export default function Maintenance() {
 
   const filteredTasks = tasks.filter(task => {
     if (selectedFilter === 'All') return true;
-    if (selectedFilter === 'Pending') return task.status === 'Pending' || task.status === 'Scheduled';
+    if (selectedFilter === 'Pending') return task.status === 'Pending' && task.hasChecklist;
     return task.status === selectedFilter;
   });
 
@@ -122,6 +128,7 @@ export default function Maintenance() {
       case 'Completed': return '#10B981';
       case 'Overdue': return '#EF4444';
       case 'Pending': return '#F59E0B';
+      case 'Incomplete': return '#9CA3AF';
       default: return '#6B7280';
     }
   };
@@ -131,39 +138,44 @@ export default function Maintenance() {
       case 'Completed': return '#D1FAE5';
       case 'Overdue': return '#FEE2E2';
       case 'Pending': return '#FEF3C7';
+      case 'Incomplete': return '#F3F4F6';
       default: return '#F3F4F6';
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
       
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
+        <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <View style={{flex: 1, marginLeft: 16}}>
-            <Text style={styles.brandTitle}>SUJATHA Service</Text>
-            <Text style={styles.headerSubtitle}>Schedules & Work Orders</Text>
+            <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA Service</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Schedules & Work Orders</Text>
           </View>
-          <TouchableOpacity style={styles.addButtonSmall}>
-            <Ionicons name="add" size={24} color="#2563EB" />
+          <TouchableOpacity style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+            <Ionicons name="add" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Filter Tabs */}
-        <View style={styles.filterContainer}>
+        <View style={[styles.filterContainer, { backgroundColor: theme.colors.surface }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
             {['All', 'Pending', 'Overdue', 'Completed'].map((filter) => (
               <TouchableOpacity
                 key={filter}
-                style={[styles.filterChip, selectedFilter === filter && styles.filterChipActive]}
+                style={[
+                  styles.filterChip, 
+                  { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                  selectedFilter === filter && [styles.filterChipActive, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]
+                ]}
                 onPress={() => setSelectedFilter(filter)}
               >
-                <Text style={[styles.filterChipText, selectedFilter === filter && styles.filterChipTextActive]}>
+                <Text style={[styles.filterChipText, { color: theme.colors.textSecondary }, selectedFilter === filter && styles.filterChipTextActive]}>
                   {filter}
                 </Text>
               </TouchableOpacity>
@@ -178,78 +190,81 @@ export default function Maintenance() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={() => (
             <View style={styles.emptyState}>
-              <Ionicons name="checkmark-circle-outline" size={64} color="#E5E7EB" />
-              <Text style={styles.emptyStateTitle}>All caught up!</Text>
-              <Text style={styles.emptyStateText}>No routine tasks found for this filter.</Text>
+              <Ionicons name="checkmark-circle-outline" size={64} color={theme.colors.border} />
+              <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>All caught up!</Text>
+              <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>No routine tasks found for this filter.</Text>
             </View>
           )}
           renderItem={({ item }) => (
-            <View style={[styles.card, item.status === 'Completed' && styles.cardDisabled]}>
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, item.status === 'Completed' && [styles.cardDisabled, { backgroundColor: theme.dark ? '#1F2937' : '#F9FAFB' }]]}>
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.equipmentName}>{item.equipment_name} ({item.schedule_type})</Text>
-                  <Text style={styles.equipmentId}>{item.equipment_id}</Text>
+                  <Text style={[styles.equipmentName, { color: theme.colors.text }]}>{item.equipment_name} ({item.schedule_type})</Text>
+                  <Text style={[styles.equipmentId, { color: theme.colors.textSecondary }]}>{item.equipment_id}</Text>
                   {item.status === 'Completed' && (
                     <Text style={styles.unlocksText}>Next checklist opens {item.scheduled_date}</Text>
                   )}
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status), flexDirection: 'row', alignItems: 'center' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: theme.dark ? (item.status === 'Completed' ? '#064e3b' : (item.status === 'Overdue' ? '#451a03' : '#3f2e03')) : getStatusBgColor(item.status), flexDirection: 'row', alignItems: 'center' }]}>
                   {item.status === 'Completed' && <Ionicons name="lock-closed" size={12} color={getStatusColor(item.status)} style={{marginRight: 4}} />}
                   <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status}</Text>
                 </View>
               </View>
 
-              <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
+              <Text style={[styles.description, { color: theme.colors.textSecondary }]} numberOfLines={2}>{item.description}</Text>
 
               <View style={styles.cardFooterActions}>
                 <TouchableOpacity 
-                  style={styles.historyBtn}
+                  style={[styles.historyBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
                   onPress={() => router.push({
                     pathname: '/routine-history',
                     params: { equipmentId: item.equipment_id, equipmentName: item.equipment_name }
                   })}
                 >
-                  <Ionicons name="time-outline" size={18} color="#2563EB" />
-                  <Text style={styles.historyBtnText}>History</Text>
+                  <Ionicons name="time-outline" size={18} color={theme.colors.primary} />
+                  <Text style={[styles.historyBtnText, { color: theme.colors.primary }]}>History</Text>
                 </TouchableOpacity>
                 <View style={{ flex: 1 }} />
-                <TouchableOpacity 
-                  style={[styles.smallExecuteBtn, item.status === 'Completed' && styles.smallExecuteBtnDisabled]}
-                  disabled={item.status === 'Completed'}
-                  onPress={() => {
-                    router.push({
-                      pathname: '/routine-execute',
-                      params: {
-                        id: item.id.toString(),
-                        equipment_name: item.equipment_name,
-                        equipment_id: item.equipment_id,
-                        schedule_type: item.schedule_type
-                      }
-                    });
-                  }}
-                >
-                  <Text style={[styles.smallExecuteBtnText, item.status === 'Completed' && styles.smallExecuteBtnTextDisabled]}>
-                    {item.status === 'Completed' ? 'Locked' : 'Start Task'}
-                  </Text>
-                </TouchableOpacity>
+                
+                {item.hasChecklist && (
+                  <TouchableOpacity 
+                    style={[styles.smallExecuteBtn, { backgroundColor: theme.colors.primary }, item.status === 'Completed' && [styles.smallExecuteBtnDisabled, { backgroundColor: theme.colors.border }]]}
+                    disabled={item.status === 'Completed'}
+                    onPress={() => {
+                      router.push({
+                        pathname: '/routine-execute',
+                        params: {
+                          id: item.id.toString(),
+                          equipment_name: item.equipment_name,
+                          equipment_id: item.equipment_id,
+                          schedule_type: item.schedule_type
+                        }
+                      });
+                    }}
+                  >
+                    <Text style={[styles.smallExecuteBtnText, item.status === 'Completed' && [styles.smallExecuteBtnTextDisabled, { color: theme.colors.textSecondary }]]}>
+                      {item.status === 'Completed' ? 'Locked' : 'Start Task'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
-              <View style={styles.cardFooter}>
+              <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
                 <View style={styles.footerItem}>
-                  <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                  <Text style={styles.footerText}>Due: {item.scheduled_date}</Text>
+                  <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Due: {item.scheduled_date}</Text>
                 </View>
 
                 {item.last_completed_date && (
                   <View style={styles.footerItem}>
-                    <Ionicons name="checkmark-done-outline" size={16} color="#10B981" />
-                    <Text style={styles.footerText}>Done: {item.last_completed_date}</Text>
+                    <Ionicons name="checkmark-done-outline" size={16} color={theme.colors.success} />
+                    <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Done: {item.last_completed_date}</Text>
                   </View>
                 )}
 
                 <View style={styles.footerItem}>
-                  <Ionicons name="build-outline" size={16} color="#6B7280" />
-                  <Text style={styles.footerText}>{item.schedule_type}</Text>
+                  <Ionicons name="build-outline" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>{item.schedule_type}</Text>
                 </View>
               </View>
             </View>

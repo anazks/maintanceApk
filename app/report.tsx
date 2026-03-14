@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 interface Defect {
   id: number;
@@ -28,6 +29,7 @@ interface Defect {
 }
 
 export default function ReportDefect() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [defects, setDefects] = useState<Defect[]>([]);
@@ -79,42 +81,42 @@ export default function ReportDefect() {
   };
 
   const renderDefect = ({ item }: { item: Defect }) => (
-    <View style={styles.defectCard}>
+    <View style={[styles.defectCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
       <View style={styles.cardHeader}>
         <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) + '20' }]}>
           <Text style={[styles.priorityText, { color: getPriorityColor(item.priority) }]}>{item.priority}</Text>
         </View>
-        <Text style={styles.dateText}>{item.report_date.split('T')[0]}</Text>
+        <Text style={[styles.dateText, { color: theme.colors.textSecondary }]}>{item.report_date.split('T')[0]}</Text>
       </View>
 
-      <Text style={styles.defectTitle}>{item.title}</Text>
+      <Text style={[styles.defectTitle, { color: theme.colors.text }]}>{item.title}</Text>
       
       <View style={styles.equipSmallRow}>
-        <Ionicons name="hardware-chip-outline" size={14} color="#6B7280" />
-        <Text style={styles.equipNameText}>{item.equipment_name}</Text>
-        <Text style={styles.equipIdText}>({item.equipment_id_str})</Text>
+        <Ionicons name="hardware-chip-outline" size={14} color={theme.colors.textSecondary} />
+        <Text style={[styles.equipNameText, { color: theme.colors.textSecondary }]}>{item.equipment_name}</Text>
+        <Text style={[styles.equipIdText, { color: theme.colors.textSecondary }]}>({item.equipment_id_str})</Text>
       </View>
 
-      <Text style={styles.defectDesc}>{item.description}</Text>
+      <Text style={[styles.defectDesc, { color: theme.colors.text }]}>{item.description}</Text>
 
-      <View style={styles.cardFooter}>
+      <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
          <View style={styles.reportedByRow}>
-           <Ionicons name="person-circle-outline" size={16} color="#9CA3AF" />
-           <Text style={styles.reportedByText}>{item.reported_by}</Text>
+           <Ionicons name="person-circle-outline" size={16} color={theme.colors.textSecondary} />
+           <Text style={[styles.reportedByText, { color: theme.colors.textSecondary }]}>{item.reported_by}</Text>
          </View>
          
          {item.status === 'Open' ? (
            <TouchableOpacity 
-             style={styles.resolveBtn} 
+             style={[styles.resolveBtn, { backgroundColor: theme.colors.success }]} 
              onPress={() => updateDefectStatus(item.id, 'Closed')}
            >
              <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
              <Text style={styles.resolveBtnText}>Resolve</Text>
            </TouchableOpacity>
          ) : (
-           <View style={styles.closedBadge}>
-             <Ionicons name="checkmark-circle" size={16} color="#059669" />
-             <Text style={styles.closedText}>Closed</Text>
+           <View style={[styles.closedBadge, { backgroundColor: theme.dark ? '#064e3b' : '#D1FAE5' }]}>
+             <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
+             <Text style={[styles.closedText, { color: theme.colors.success }]}>Closed</Text>
            </View>
          )}
       </View>
@@ -122,43 +124,43 @@ export default function ReportDefect() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
+      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Defect Management</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Defect Management</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.filterBar}>
+      <View style={[styles.filterBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         {(['Open', 'Closed', 'All'] as const).map(f => (
           <TouchableOpacity 
             key={f} 
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
+            style={[styles.filterChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, filter === f && [styles.filterChipActive, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]]}
             onPress={() => setFilter(f)}
           >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
+            <Text style={[styles.filterText, { color: theme.colors.textSecondary }, filter === f && styles.filterTextActive]}>{f}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
+        <View style={[styles.center, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       ) : (
         <FlatList
           data={filteredDefects}
           keyExtractor={item => item.id.toString()}
           renderItem={renderDefect}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { backgroundColor: theme.colors.background }]}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="shield-checkmark-outline" size={64} color="#E5E7EB" />
-              <Text style={styles.emptyTitle}>All Clear!</Text>
-              <Text style={styles.emptyText}>No {filter === 'All' ? '' : filter.toLowerCase()} defects found.</Text>
+              <Ionicons name="shield-checkmark-outline" size={64} color={theme.colors.border} />
+              <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>All Clear!</Text>
+              <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No {filter === 'All' ? '' : filter.toLowerCase()} defects found.</Text>
             </View>
           }
         />

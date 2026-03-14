@@ -15,6 +15,7 @@ import {
   UIManager,
 } from 'react-native';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -40,6 +41,7 @@ interface MaintenanceLog {
 }
 
 export default function RoutineHistory() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const { equipmentId, equipmentName } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
@@ -118,47 +120,47 @@ export default function RoutineHistory() {
 
     return (
       <TouchableOpacity 
-        style={[styles.logCard, item.expanded && styles.logCardExpanded]} 
+        style={[styles.logCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, item.expanded && [styles.logCardExpanded, { borderColor: theme.colors.primary }]]} 
         onPress={() => toggleExpand(item.id)}
         activeOpacity={0.7}
       >
         <View style={styles.logHeader}>
           <View style={styles.logHeaderLeft}>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeText}>{item.schedule_type}</Text>
+            <View style={[styles.typeBadge, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+              <Text style={[styles.typeText, { color: theme.colors.primary }]}>{item.schedule_type}</Text>
             </View>
-            <Text style={styles.logDate}>{date}</Text>
+            <Text style={[styles.logDate, { color: theme.colors.text }]}>{date}</Text>
           </View>
           <Ionicons 
             name={item.expanded ? "chevron-up" : "chevron-down"} 
             size={20} 
-            color="#9CA3AF" 
+            color={theme.colors.textSecondary} 
           />
         </View>
 
         <View style={styles.logSummary}>
           <View style={styles.maintainerRow}>
-            <Ionicons name="person-outline" size={14} color="#6B7280" />
-            <Text style={styles.maintainerText}>{item.maintainer_name}</Text>
+            <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
+            <Text style={[styles.maintainerText, { color: theme.colors.textSecondary }]}>{item.maintainer_name}</Text>
           </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{item.status}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: theme.dark ? '#064e3b' : '#D1FAE5' }]}>
+            <Text style={[styles.statusText, { color: theme.colors.success }]}>{item.status}</Text>
           </View>
         </View>
 
         {item.expanded && (
           <View style={styles.expandedContent}>
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: theme.colors.border }]} />
             
-            <Text style={styles.detailLabel}>Checklist Results:</Text>
+            <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>Checklist Results:</Text>
             {item.items.map((check) => (
               <View key={check.id} style={styles.checkRow}>
                 <Ionicons 
                   name={check.is_completed ? "checkmark-circle" : "close-circle"} 
                   size={16} 
-                  color={check.is_completed ? "#10B981" : "#EF4444"} 
+                  color={check.is_completed ? theme.colors.success : theme.colors.error} 
                 />
-                <Text style={[styles.checkText, !check.is_completed && styles.checkTextIncomplete]}>
+                <Text style={[styles.checkText, { color: theme.colors.text }, !check.is_completed && [styles.checkTextIncomplete, { color: theme.colors.textSecondary }]]}>
                   {check.task_description}
                 </Text>
               </View>
@@ -166,9 +168,9 @@ export default function RoutineHistory() {
 
             {item.remarks ? (
               <>
-                <Text style={[styles.detailLabel, { marginTop: 12 }]}>Remarks:</Text>
-                <View style={styles.remarksBox}>
-                  <Text style={styles.remarksText}>{item.remarks}</Text>
+                <Text style={[styles.detailLabel, { marginTop: 12, color: theme.colors.textSecondary }]}>Remarks:</Text>
+                <View style={[styles.remarksBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <Text style={[styles.remarksText, { color: theme.colors.text }]}>{item.remarks}</Text>
                 </View>
               </>
             ) : null}
@@ -180,23 +182,23 @@ export default function RoutineHistory() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
       
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.brandTitle}>SUJATHA History</Text>
-          <Text style={styles.headerSubtitle}>{equipmentName || 'Asset History'}</Text>
+          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA History</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{equipmentName || 'Asset History'}</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -205,12 +207,12 @@ export default function RoutineHistory() {
         data={logs}
         keyExtractor={item => item.id.toString()}
         renderItem={renderLogEntry}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { backgroundColor: theme.colors.background }]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="document-text-outline" size={64} color="#E5E7EB" />
-            <Text style={styles.emptyTitle}>No History Found</Text>
-            <Text style={styles.emptyText}>No routine logs have been recorded for this asset yet.</Text>
+            <Ionicons name="document-text-outline" size={64} color={theme.colors.border} />
+            <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No History Found</Text>
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No routine logs have been recorded for this asset yet.</Text>
           </View>
         }
       />

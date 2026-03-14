@@ -15,8 +15,10 @@ import {
   View
 } from 'react-native';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ScanEquipment() {
+  const { theme } = useTheme();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState<boolean>(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -27,7 +29,7 @@ export default function ScanEquipment() {
   const [equipmentName, setEquipmentName] = useState<string>('');
   const [showDefectModal, setShowDefectModal] = useState(false);
   const [defectLoading, setDefectLoading] = useState(false);
-  const [defectForm, setDefectForm] = useState({ title: '', description: '', priority: 'Medium' });
+  const [defectForm, setDefectForm] = useState({ title: '', description: '', priority: 'Medium', reportedBy: '' });
   const [lastMaintenance, setLastMaintenance] = useState<{
     date: string,
     maintainer: string,
@@ -74,8 +76,8 @@ export default function ScanEquipment() {
   };
 
   const submitDefect = () => {
-    if (!defectForm.title.trim() || !defectForm.description.trim()) {
-      Alert.alert('Required', 'Please enter a title and description.');
+    if (!defectForm.title.trim() || !defectForm.description.trim() || !defectForm.reportedBy.trim()) {
+      Alert.alert('Required', 'Please fill in all required fields (Title, Description, and Reporter).');
       return;
     }
 
@@ -87,12 +89,12 @@ export default function ScanEquipment() {
 
       db.runSync(`
         INSERT INTO Defects (equipment_id, reported_by, title, description, priority, status, report_date)
-        VALUES (?, 'Operator', ?, ?, ?, 'Open', datetime('now'))
-      `, [targetId, defectForm.title, defectForm.description, defectForm.priority]);
+        VALUES (?, ?, ?, ?, ?, 'Open', datetime('now'))
+      `, [targetId, defectForm.reportedBy, defectForm.title, defectForm.description, defectForm.priority]);
 
       Alert.alert('Success', 'Defect report has been saved and maintenance notified.');
       setShowDefectModal(false);
-      setDefectForm({ title: '', description: '', priority: 'Medium' });
+      setDefectForm({ title: '', description: '', priority: 'Medium', reportedBy: '' });
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to save defect report.');
@@ -111,7 +113,7 @@ export default function ScanEquipment() {
     setLastMaintenance(null);
     setAssignedRoutines([]);
     setLinkedSpares([]);
-    setDefectForm({ title: '', description: '', priority: 'Medium' });
+    setDefectForm({ title: '', description: '', priority: 'Medium', reportedBy: '' });
     setShowDefectModal(false);
   };
 
@@ -185,20 +187,20 @@ export default function ScanEquipment() {
 
   if (hasPermission === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.messageText}>Requesting camera permission...</Text>
+      <View style={[styles.centeredContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.messageText, { color: theme.colors.textSecondary }]}>Requesting camera permission...</Text>
       </View>
     );
   }
 
   if (hasPermission === false) {
     return (
-      <View style={styles.centeredContainer}>
-        <Ionicons name="camera-outline" size={64} color="#6B7280" />
-        <Text style={styles.messageText}>No access to camera</Text>
+      <View style={[styles.centeredContainer, { backgroundColor: theme.colors.background }]}>
+        <Ionicons name="camera-outline" size={64} color={theme.colors.textSecondary} />
+        <Text style={[styles.messageText, { color: theme.colors.textSecondary }]}>No access to camera</Text>
         <TouchableOpacity
-          style={styles.permissionButton}
+          style={[styles.permissionButton, { backgroundColor: theme.colors.primary }]}
           onPress={() => {
             const getPermissions = async () => {
               const { status } = await Camera.requestCameraPermissionsAsync();
@@ -275,19 +277,20 @@ export default function ScanEquipment() {
         onRequestClose={() => setShowDetails(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
+
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderLeft}>
                 <View style={styles.successIconBadge}>
                   <Ionicons name="checkmark" size={18} color="#059669" />
                 </View>
                 <View>
-                  <Text style={styles.modalTitle}>Asset Identified</Text>
-                  <Text style={styles.modalSubtitle}>Registry match found</Text>
+                  <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Asset Identified</Text>
+                  <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>Registry match found</Text>
                 </View>
               </View>
-              <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowDetails(false)}>
-                <Ionicons name="close" size={20} color="#6B7280" />
+              <TouchableOpacity style={[styles.closeModalBtn, { backgroundColor: theme.colors.background }]} onPress={() => setShowDetails(false)}>
+                <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -296,21 +299,21 @@ export default function ScanEquipment() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 20 }}
             >
-              <View style={styles.summaryCard}>
-                <View style={styles.cardAccent} />
-                <Text style={styles.summaryTitle}>{equipmentName || scannedData?.name || 'Unknown Asset'}</Text>
+              <View style={[styles.summaryCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <View style={[styles.cardAccent, { backgroundColor: theme.colors.primary }]} />
+                <Text style={[styles.summaryTitle, { color: theme.colors.text }]}>{equipmentName || scannedData?.name || 'Unknown Asset'}</Text>
                 <View style={styles.idRow}>
-                  <Ionicons name="barcode-outline" size={14} color="#6B7280" />
-                  <Text style={styles.summaryId}>{scannedData?.id || scannedData?.equipment_id || 'ID N/A'}</Text>
+                  <Ionicons name="barcode-outline" size={14} color={theme.colors.textSecondary} />
+                  <Text style={[styles.summaryId, { color: theme.colors.textSecondary }]}>{scannedData?.id || scannedData?.equipment_id || 'ID N/A'}</Text>
                 </View>
 
-                <View style={styles.historyHighlight}>
-                  <View style={styles.historyIconBox}>
-                    <Ionicons name="time" size={20} color="#2563EB" />
+                <View style={[styles.historyHighlight, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+                  <View style={[styles.historyIconBox, { backgroundColor: theme.dark ? '#1e40af' : '#DBEAFE' }]}>
+                    <Ionicons name="time" size={20} color={theme.colors.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.historyLabel}>Latest Maintenance</Text>
-                    <Text style={styles.historyValue}>
+                    <Text style={[styles.historyLabel, { color: theme.colors.textSecondary }]}>Latest Maintenance</Text>
+                    <Text style={[styles.historyValue, { color: theme.colors.text }]}>
                       {lastMaintenance ? `${lastMaintenance.date} • ${lastMaintenance.maintainer}` : 'No service record available'}
                     </Text>
                   </View>
@@ -320,16 +323,16 @@ export default function ScanEquipment() {
                   <View style={styles.lastLogSection}>
                     {lastMaintenance.tasks.length > 0 && (
                       <View style={styles.miniTasksContainer}>
-                        <Text style={styles.miniHeader}>Tasks Performed</Text>
+                        <Text style={[styles.miniHeader, { color: theme.colors.textSecondary }]}>Tasks Performed</Text>
                         <View style={styles.tasksGrid}>
                           {lastMaintenance.tasks.slice(0, 4).map((t, idx) => (
                             <View key={idx} style={styles.miniTaskRow}>
                               <Ionicons
                                 name={t.completed ? "checkmark-circle" : "alert-circle"}
                                 size={14}
-                                color={t.completed ? "#10B981" : "#EF4444"}
+                                color={t.completed ? theme.colors.success : theme.colors.error}
                               />
-                              <Text style={styles.miniTaskText} numberOfLines={1}>{t.description}</Text>
+                              <Text style={[styles.miniTaskText, { color: theme.colors.text }]} numberOfLines={1}>{t.description}</Text>
                             </View>
                           ))}
                         </View>
@@ -341,8 +344,8 @@ export default function ScanEquipment() {
 
                     {lastMaintenance.remarks && (
                       <View style={styles.miniRemarksContainer}>
-                        <Text style={styles.miniHeader}>Inspector Remarks</Text>
-                        <Text style={styles.miniRemarksText}>"{lastMaintenance.remarks}"</Text>
+                        <Text style={[styles.miniHeader, { color: theme.colors.textSecondary }]}>Inspector Remarks</Text>
+                        <Text style={[styles.miniRemarksText, { color: theme.colors.text }]}>"{lastMaintenance.remarks}"</Text>
                       </View>
                     )}
 
@@ -360,34 +363,34 @@ export default function ScanEquipment() {
                         });
                       }}
                     >
-                      <Text style={styles.fullHistoryLinkText}>View Full Service Ledger</Text>
-                      <Ionicons name="arrow-forward" size={14} color="#2563EB" />
+                      <Text style={[styles.fullHistoryLinkText, { color: theme.colors.primary }]}>View Full Service Ledger</Text>
+                      <Ionicons name="arrow-forward" size={14} color={theme.colors.primary} />
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
 
               <View style={styles.rawInfoSection}>
-                <Text style={styles.sectionHeader}>Active Routines</Text>
+                <Text style={[styles.sectionHeader, { color: theme.colors.textSecondary }]}>Active Routines</Text>
                 {assignedRoutines.length === 0 ? (
-                  <View style={styles.emptySparesContainer}>
-                    <Text style={styles.emptySparesText}>No routines assigned to this asset</Text>
+                  <View style={[styles.emptySparesContainer, { backgroundColor: theme.colors.background }]}>
+                    <Text style={[styles.emptySparesText, { color: theme.colors.textSecondary }]}>No routines assigned to this asset</Text>
                   </View>
                 ) : (
                   <View style={styles.routinesList}>
                     {assignedRoutines.map(routine => (
-                      <View key={routine.id} style={styles.routineItem}>
+                      <View key={routine.id} style={[styles.routineItem, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                         <View style={styles.routineInfo}>
-                          <Text style={styles.routineType}>{routine.type} Routine</Text>
-                          <Text style={styles.routineDue}>Next Due: {routine.next_due}</Text>
+                          <Text style={[styles.routineType, { color: theme.colors.text }]}>{routine.type} Routine</Text>
+                          <Text style={[styles.routineDue, { color: theme.colors.textSecondary }]}>Next Due: {routine.next_due}</Text>
                         </View>
                         <View style={[
                           styles.statusBadge,
-                          { backgroundColor: routine.is_overdue ? '#FEF2F2' : (routine.is_future ? '#F0FDF4' : '#FFFBEB') }
+                          { backgroundColor: routine.is_overdue ? (theme.dark ? '#450a0a' : '#FEF2F2') : (routine.is_future ? (theme.dark ? '#064e3b' : '#F0FDF4') : (theme.dark ? '#451a03' : '#FFFBEB')) }
                         ]}>
                           <Text style={[
                             styles.statusBadgeText,
-                            { color: routine.is_overdue ? '#EF4444' : (routine.is_future ? '#10B981' : '#F59E0B') }
+                            { color: routine.is_overdue ? theme.colors.error : (routine.is_future ? theme.colors.success : theme.colors.warning) }
                           ]}>
                             {routine.is_overdue ? 'OVERDUE' : (routine.is_future ? 'Upcoming' : 'Due Today')}
                           </Text>
@@ -399,10 +402,10 @@ export default function ScanEquipment() {
               </View>
 
               <View style={styles.rawInfoSection}>
-                <Text style={styles.sectionHeader}>Linked Spare Parts</Text>
+                <Text style={[styles.sectionHeader, { color: theme.colors.textSecondary }]}>Linked Spare Parts</Text>
                 {linkedSpares.length === 0 ? (
-                  <View style={styles.emptySparesContainer}>
-                    <Text style={styles.emptySparesText}>No parts linked to this asset</Text>
+                  <View style={[styles.emptySparesContainer, { backgroundColor: theme.colors.background }]}>
+                    <Text style={[styles.emptySparesText, { color: theme.colors.textSecondary }]}>No parts linked to this asset</Text>
                     <TouchableOpacity
                       style={styles.linkPartsInlineBtn}
                       onPress={() => {
@@ -415,29 +418,29 @@ export default function ScanEquipment() {
                         }
                       }}
                     >
-                      <Text style={styles.linkPartsInlineText}>Link Spare Parts Now</Text>
-                      <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
+                      <Text style={[styles.linkPartsInlineText, { color: theme.colors.primary }]}>Link Spare Parts Now</Text>
+                      <Ionicons name="add-circle-outline" size={16} color={theme.colors.primary} />
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <View style={styles.sparesGrid}>
                     {linkedSpares.map(spare => (
-                      <View key={spare.id} style={styles.spareCard}>
+                      <View key={spare.id} style={[styles.spareCard, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
                         <View style={styles.spareCardTop}>
-                          <Text style={styles.spareNameText} numberOfLines={1}>{spare.name}</Text>
+                          <Text style={[styles.spareNameText, { color: theme.colors.text }]} numberOfLines={1}>{spare.name}</Text>
                           <View style={[
                             styles.miniStockBadge,
-                            { backgroundColor: spare.available_quantity <= spare.minimum_quantity ? '#FEF2F2' : '#F0FDF4' }
+                            { backgroundColor: spare.available_quantity <= spare.minimum_quantity ? (theme.dark ? '#450a0a' : '#FEF2F2') : (theme.dark ? '#064e3b' : '#F0FDF4') }
                           ]}>
                             <Text style={[
                               styles.miniStockText,
-                              { color: spare.available_quantity <= spare.minimum_quantity ? '#EF4444' : '#10B981' }
+                              { color: spare.available_quantity <= spare.minimum_quantity ? theme.colors.error : theme.colors.success }
                             ]}>
                               {spare.available_quantity} units
                             </Text>
                           </View>
                         </View>
-                        <Text style={styles.sparePartNo}>{spare.part_number}</Text>
+                        <Text style={[styles.sparePartNo, { color: theme.colors.textSecondary }]}>{spare.part_number}</Text>
                       </View>
                     ))}
                   </View>
@@ -445,17 +448,17 @@ export default function ScanEquipment() {
               </View>
 
               <View style={[styles.rawInfoSection, { marginTop: 20 }]}>
-                <Text style={styles.sectionHeader}>Metadata Details</Text>
+                <Text style={[styles.sectionHeader, { color: theme.colors.textSecondary }]}>Metadata Details</Text>
                 <View style={styles.rawGrid}>
                   {scannedData && Object.entries(scannedData).map(([key, value]) => {
                     // Filter out internal fields if necessary
                     if (['id', 'name', 'equipment_id'].includes(key)) return null;
                     return (
-                      <View key={key} style={styles.detailRow}>
-                        <Text style={styles.detailKey}>
+                      <View key={key} style={[styles.detailRow, { borderBottomColor: theme.colors.border }]}>
+                        <Text style={[styles.detailKey, { color: theme.colors.textSecondary }]}>
                           {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')}
                         </Text>
-                        <Text style={styles.detailValue} numberOfLines={1}>{String(value)}</Text>
+                        <Text style={[styles.detailValue, { color: theme.colors.text }]} numberOfLines={1}>{String(value)}</Text>
                       </View>
                     );
                   })}
@@ -466,15 +469,15 @@ export default function ScanEquipment() {
             <View style={styles.modalFooter}>
               <View style={styles.footerRow}>
                 <TouchableOpacity
-                  style={styles.scanAgainButton}
+                  style={[styles.scanAgainButton, { backgroundColor: theme.colors.background }]}
                   onPress={resetScanner}
                 >
-                  <Ionicons name="refresh" size={18} color="#4B5563" />
-                  <Text style={styles.scanAgainText}>Retry</Text>
+                  <Ionicons name="refresh" size={18} color={theme.colors.textSecondary} />
+                  <Text style={[styles.scanAgainText, { color: theme.colors.textSecondary }]}>Retry</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.historyActionButton}
+                  style={[styles.historyActionButton, { backgroundColor: theme.dark ? '#1E3A8A' : theme.colors.primary }]}
                   onPress={() => {
                     setShowDetails(false);
                     router.push({
@@ -492,15 +495,15 @@ export default function ScanEquipment() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.defectActionBtn}
+                  style={[styles.defectActionBtn, { backgroundColor: theme.dark ? '#450a0a' : '#FEF2F2' }]}
                   onPress={() => setShowDefectModal(true)}
                 >
-                  <Ionicons name="alert-circle-outline" size={20} color="#EF4444" />
+                  <Ionicons name="alert-circle-outline" size={20} color={theme.colors.error} />
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity
-                style={styles.primaryActionButton}
+                style={[styles.primaryActionButton, { backgroundColor: theme.colors.primary }]}
                 onPress={() => {
                   if (equipmentId) {
                     setShowDetails(false);
@@ -524,47 +527,58 @@ export default function ScanEquipment() {
       {/* Defect Reporting Modal */}
       <Modal visible={showDefectModal} transparent animationType="fade">
         <View style={styles.defectModalOverlay}>
-          <View style={styles.defectModalContent}>
+          <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.defectModalHeader}>
-              <Text style={styles.defectModalTitle}>Report Defect</Text>
+              <Text style={[styles.defectModalTitle, { color: theme.colors.text }]}>Report Defect</Text>
               <TouchableOpacity onPress={() => setShowDefectModal(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.defectModalSub}>Identifying an issue for {equipmentName || 'this asset'}</Text>
+            <Text style={[styles.defectModalSub, { color: theme.colors.textSecondary }]}>Identifying an issue for {equipmentName || 'this asset'}</Text>
 
-            <Text style={styles.defectLabel}>Issue Title</Text>
+            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Issue Title</Text>
             <TextInput
-              style={styles.defectInput}
+              style={[styles.defectInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
               placeholder="e.g. Unusual noise from motor"
+              placeholderTextColor={theme.colors.textSecondary}
               value={defectForm.title}
               onChangeText={t => setDefectForm(f => ({ ...f, title: t }))}
             />
 
-            <Text style={styles.defectLabel}>Priority</Text>
+            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Priority</Text>
             <View style={styles.priorityRow}>
               {['Low', 'Medium', 'High', 'Critical'].map(p => (
                 <TouchableOpacity
                   key={p}
-                  style={[styles.priorityChip, defectForm.priority === p && styles.priorityChipActive]}
+                  style={[styles.priorityChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, defectForm.priority === p && [styles.priorityChipActive, { backgroundColor: theme.colors.primary, borderColor: 'transparent' }]]}
                   onPress={() => setDefectForm(f => ({ ...f, priority: p }))}
                 >
-                  <Text style={[styles.priorityChipText, defectForm.priority === p && styles.priorityChipTextActive]}>{p}</Text>
+                  <Text style={[styles.priorityChipText, { color: theme.colors.textSecondary }, defectForm.priority === p && [styles.priorityChipTextActive, { color: '#FFFFFF' }]]}>{p}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.defectLabel}>Detailed Description</Text>
+            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Reported By *</Text>
             <TextInput
-              style={[styles.defectInput, { height: 100, textAlignVertical: 'top' }]}
+              style={[styles.defectInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+              placeholder="Enter your name"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={defectForm.reportedBy}
+              onChangeText={t => setDefectForm(f => ({ ...f, reportedBy: t }))}
+            />
+
+            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Detailed Description</Text>
+            <TextInput
+              style={[styles.defectInput, { height: 100, textAlignVertical: 'top', backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
               placeholder="Describe the problem in detail..."
+              placeholderTextColor={theme.colors.textSecondary}
               multiline
               value={defectForm.description}
               onChangeText={t => setDefectForm(f => ({ ...f, description: t }))}
             />
 
             <TouchableOpacity
-              style={[styles.defectSubmitBtn, defectLoading && { opacity: 0.7 }]}
+              style={[styles.defectSubmitBtn, { backgroundColor: theme.colors.error }, defectLoading && { opacity: 0.7 }]}
               onPress={submitDefect}
               disabled={defectLoading}
             >

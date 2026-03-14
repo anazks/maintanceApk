@@ -85,6 +85,7 @@ export const initDB = () => {
         available_quantity INTEGER DEFAULT 0,
         price TEXT,
         location TEXT,
+        keeper_name TEXT,
         date_added DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -93,6 +94,7 @@ export const initDB = () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         equipment_id INTEGER,
         spare_id INTEGER,
+        linked_by TEXT,
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id),
         FOREIGN KEY (spare_id) REFERENCES Spare_Parts (id)
       );
@@ -114,7 +116,30 @@ export const initDB = () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL
       );
+
+      -- Users Table for RBAC
+      CREATE TABLE IF NOT EXISTS Users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'Staff', -- Admin, Staff
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
     `);
+
+    // Seed Super Admin if not exists
+    try {
+      const adminExists = db.getFirstSync<{id: number}>('SELECT id FROM Users WHERE username = ?', ['sujatha']);
+      if (!adminExists) {
+        db.runSync(
+          'INSERT INTO Users (username, password, role) VALUES (?, ?, ?)',
+          ['sujatha', '1234@qwer', 'Admin']
+        );
+        console.log('Super Admin seeded successfully');
+      }
+    } catch (e) {
+      console.error('Failed to seed super admin', e);
+    }
 
     // Insert Default Categories if none exist
     try {
@@ -132,9 +157,20 @@ export const initDB = () => {
       console.error('Failed to initialize default categories', e);
     }
     
-    // Patch existing DB schema if needed
     try {
       db.execSync('ALTER TABLE Spare_Usage ADD COLUMN maintainer_name TEXT;');
+    } catch (e) {
+      // Column already exists
+    }
+
+    try {
+      db.execSync('ALTER TABLE Spare_Parts ADD COLUMN keeper_name TEXT;');
+    } catch (e) {
+      // Column already exists
+    }
+
+    try {
+      db.execSync('ALTER TABLE Equipment_Spares ADD COLUMN linked_by TEXT;');
     } catch (e) {
       // Column already exists
     }

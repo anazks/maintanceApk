@@ -16,9 +16,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
+
 import { getDB } from '../../database';
+import { useTheme } from '../../context/ThemeContext';
 
 const SCHEDULES = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
 
@@ -37,10 +37,8 @@ interface ChecklistItem {
 
 export default function Settings() {
   const router = useRouter();
+  const { theme, isDarkMode, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<'Checklists' | 'Categories' | 'Preferences'>('Checklists');
-  const [notifications, setNotifications] = useState(true);
-  const [autoSync, setAutoSync] = useState(true);
-  
   // Category State
   const [categories, setCategories] = useState<{id: number, name: string}[]>([]);
   const [showAddCatModal, setShowAddCatModal] = useState(false);
@@ -59,39 +57,6 @@ export default function Settings() {
   const [newTask, setNewTask] = useState('');
   const [editTaskData, setEditTaskData] = useState<{id: number, text: string} | null>(null);
 
-  const handleExportDatabase = async () => {
-    try {
-      // expo-sqlite database location
-      const dbPath = `${(FileSystem as any).documentDirectory}SQLite/maintenance.db`;
-      const info = await FileSystem.getInfoAsync(dbPath);
-      
-      if (!info.exists) {
-        Alert.alert('Error', 'Database file not found.');
-        return;
-      }
-
-      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '_');
-      const backupPath = `${(FileSystem as any).cacheDirectory}SUJATHA_Backup_${dateStr}.db`;
-      
-      await FileSystem.copyAsync({
-        from: dbPath,
-        to: backupPath
-      });
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(backupPath, {
-          mimeType: 'application/x-sqlite3',
-          dialogTitle: 'Export SUJATHA Database',
-          UTI: 'public.database'
-        });
-      } else {
-        Alert.alert('Error', 'Sharing is not available on this device.');
-      }
-    } catch (error) {
-      console.error('Export Error:', error);
-      Alert.alert('Error', 'Failed to export database.');
-    }
-  };
 
   useEffect(() => {
     loadEquipment();
@@ -213,50 +178,24 @@ export default function Settings() {
     }
   };
 
-  const clearAllData = () => {
-    Alert.alert('WARNING', 'This will permanently delete ALL data (Equipment, Schedules, Logs, Spares, etc). Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'CLEAR ALL DATA', style: 'destructive', onPress: () => {
-        const db = getDB();
-        try {
-          db.withTransactionSync(() => {
-            db.runSync('DELETE FROM Maintenance_Log_Items');
-            db.runSync('DELETE FROM Maintenance_Log');
-            db.runSync('DELETE FROM Checklist_Items');
-            db.runSync('DELETE FROM Maintenance_Schedule');
-            db.runSync('DELETE FROM Defects');
-            db.runSync('DELETE FROM Spare_Usage');
-            db.runSync('DELETE FROM Equipment_Spares');
-            db.runSync('DELETE FROM Spare_Parts');
-            db.runSync('DELETE FROM Equipment');
-          });
-          Alert.alert('Cleared', 'Database has been wiped.');
-          setEquipmentList([]);
-          setSelectedEquipment(null);
-          setChecklistItems([]);
-          loadEquipment();
-        } catch(e) { Alert.alert('Error', 'Failed to clear DB'); }
-      }}
-    ]);
-  };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
 
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>SUJATHA Settings</Text>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>SUJATHA Settings</Text>
         </View>
 
         {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
+        <View style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
           <TouchableOpacity 
             style={[styles.tab, activeTab === 'Checklists' && styles.tabActive]}
             onPress={() => setActiveTab('Checklists')}
           >
             <Text style={[styles.tabText, activeTab === 'Checklists' && styles.tabTextActive]}>
-              Manage Routines
+              Routines
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -396,37 +335,80 @@ export default function Settings() {
           </View>
           )}
 
-          {/* Database & Sync - Only Visible in Preferences Tab */}
+
+          {/* Preferences Tab */}
           {activeTab === 'Preferences' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Data Management</Text>
-              
-              <View style={styles.card}>
-                <View style={styles.toggleRow}>
-                  <View style={styles.rowContent}>
-                    <Text style={styles.rowTitle}>Auto-Sync</Text>
-                    <Text style={styles.rowSubtitle}>Background data synchronization</Text>
-                  </View>
-                  <Switch 
-                    value={autoSync} 
-                    onValueChange={setAutoSync}
-                    trackColor={{ false: '#E5E7EB', true: '#93C5FD' }}
-                    thumbColor={autoSync ? '#2563EB' : '#FFFFFF'}
-                  />
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>App Preferences</Text>
+              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Customize your experience</Text>
+
+              {/* Theme Selector Card */}
+              <View style={[styles.themeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <View style={styles.themeCardHeader}>
+                  <Ionicons name={isDarkMode ? 'moon' : 'sunny'} size={22} color={isDarkMode ? '#818CF8' : '#F59E0B'} />
+                  <Text style={[styles.themeCardTitle, { color: theme.colors.text }]}>
+                    {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+                  </Text>
+                </View>
+                <Text style={[styles.themeCardSubtitle, { color: theme.colors.textSecondary }]}>
+                  Choose a display theme for the entire app
+                </Text>
+
+                {/* Theme Toggle Buttons */}
+                <View style={[styles.themeSelector, { backgroundColor: theme.colors.background }]}>
+                  <TouchableOpacity
+                    style={[
+                      styles.themeOption,
+                      !isDarkMode && [styles.themeOptionActive, { backgroundColor: theme.colors.surface, borderColor: theme.colors.primary, shadowColor: theme.colors.primary }]
+                    ]}
+                    onPress={() => !isDarkMode ? null : toggleTheme()}
+                  >
+                    <Ionicons name="sunny" size={24} color={!isDarkMode ? '#F59E0B' : theme.colors.textSecondary} />
+                    <Text style={[styles.themeOptionLabel, { color: !isDarkMode ? theme.colors.primary : theme.colors.textSecondary }]}>
+                      Light
+                    </Text>
+                    {!isDarkMode && (
+                      <View style={[styles.activeDot, { backgroundColor: theme.colors.primary }]} />
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.themeOption,
+                      isDarkMode && [styles.themeOptionActive, { backgroundColor: theme.colors.surface, borderColor: '#818CF8', shadowColor: '#818CF8' }]
+                    ]}
+                    onPress={() => isDarkMode ? null : toggleTheme()}
+                  >
+                    <Ionicons name="moon" size={24} color={isDarkMode ? '#818CF8' : theme.colors.textSecondary} />
+                    <Text style={[styles.themeOptionLabel, { color: isDarkMode ? '#818CF8' : theme.colors.textSecondary }]}>
+                      Dark
+                    </Text>
+                    {isDarkMode && (
+                      <View style={[styles.activeDot, { backgroundColor: '#818CF8' }]} />
+                    )}
+                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.divider} />
+                {/* Quick Toggle Row */}
+                <View style={[styles.toggleRow, styles.quickToggleRow, { borderTopColor: theme.colors.border }]}>
+                  <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Quick Toggle</Text>
+                  <Switch
+                    value={isDarkMode}
+                    onValueChange={toggleTheme}
+                    trackColor={{ false: '#D1D5DB', true: '#4F46E5' }}
+                    thumbColor={isDarkMode ? '#C7D2FE' : '#F3F4F6'}
+                    ios_backgroundColor="#D1D5DB"
+                  />
+                </View>
+              </View>
 
-                <TouchableOpacity style={styles.actionRow} onPress={handleExportDatabase}>
-                  <Text style={styles.actionRowText}>Export Database Backup</Text>
-                  <Ionicons name="download-outline" size={20} color="#6B7280" />
-                </TouchableOpacity>
-
-                <View style={styles.divider} />
-
-                <TouchableOpacity style={styles.actionRow} onPress={clearAllData}>
-                  <Text style={[styles.actionRowText, { color: '#EF4444' }]}>Clear All App Data</Text>
-                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+              <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <TouchableOpacity style={styles.actionRow}>
+                  <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Notifications</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Configure maintenance alerts</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -665,5 +647,67 @@ const styles = StyleSheet.create({
   equipModalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
   equipModalRowActive: { backgroundColor: '#EFF6FF' },
   equipModalName: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 2 },
-  equipModalId: { fontSize: 13, color: '#6B7280' }
+  equipModalId: { fontSize: 13, color: '#6B7280' },
+  themeCard: {
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  themeCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  themeCardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  themeCardSubtitle: {
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  themeSelector: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 6,
+    gap: 8,
+    marginBottom: 16,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  themeOptionActive: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  themeOptionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  quickToggleRow: {
+    borderTopWidth: 1,
+    paddingTop: 16,
+    marginTop: 4,
+  },
 });

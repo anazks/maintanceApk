@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -18,8 +19,10 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 export default function AddEquipment() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -117,15 +120,16 @@ export default function AddEquipment() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
+      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add New Equipment</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Add New Equipment</Text>
         <View style={styles.headerRight} />
       </View>
 
@@ -133,23 +137,23 @@ export default function AddEquipment() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.formCard}>
+        <View style={[styles.formCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           {/* Required Fields Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Required Information</Text>
-            <Text style={styles.sectionSubtitle}>Fields marked with * are required</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Required Information</Text>
+            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Fields marked with * are required</Text>
 
             {/* Equipment ID */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>
                 Equipment ID <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <View style={[styles.inputContainer, errors.equipment_id && styles.inputError]}>
-                <Ionicons name="finger-print-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, errors.equipment_id && styles.inputError]}>
+                <Ionicons name="finger-print-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="EQP-001"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.equipment_id}
                   onChangeText={(value) => updateField('equipment_id', value)}
                   autoCapitalize="characters"
@@ -162,15 +166,15 @@ export default function AddEquipment() {
 
             {/* Equipment Name */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>
                 Equipment Name <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <View style={[styles.inputContainer, errors.name && styles.inputError]}>
-                <Ionicons name="cube-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, errors.name && styles.inputError]}>
+                <Ionicons name="cube-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="Cooling Pump"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.name}
                   onChangeText={(value) => updateField('name', value)}
                 />
@@ -182,15 +186,15 @@ export default function AddEquipment() {
 
             {/* Section / System */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>
                 Section / System <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <View style={[styles.inputContainer, errors.section && styles.inputError]}>
-                <Ionicons name="layers-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, errors.section && styles.inputError]}>
+                <Ionicons name="layers-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="Water Treatment"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.section}
                   onChangeText={(value) => updateField('section', value)}
                 />
@@ -202,15 +206,15 @@ export default function AddEquipment() {
 
             {/* Equipment Location */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>
                 Equipment Location <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <View style={[styles.inputContainer, errors.location && styles.inputError]}>
-                <Ionicons name="location-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, errors.location && styles.inputError]}>
+                <Ionicons name="location-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="Plant Room 2"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.location}
                   onChangeText={(value) => updateField('location', value)}
                 />
@@ -223,18 +227,18 @@ export default function AddEquipment() {
 
           {/* Optional Fields Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Additional Details</Text>
-            <Text style={styles.sectionSubtitle}>Optional information</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Additional Details</Text>
+            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Optional information</Text>
 
             {/* Manufacturer */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Manufacturer</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="business-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Text style={[styles.label, { color: theme.colors.text }]}>Manufacturer</Text>
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <Ionicons name="business-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="Siemens"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.manufacturer}
                   onChangeText={(value) => updateField('manufacturer', value)}
                 />
@@ -243,13 +247,13 @@ export default function AddEquipment() {
 
             {/* Model Number */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Model Number</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="barcode-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Text style={[styles.label, { color: theme.colors.text }]}>Model Number</Text>
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <Ionicons name="barcode-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="SPM-450"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.model_number}
                   onChangeText={(value) => updateField('model_number', value)}
                 />
@@ -258,13 +262,13 @@ export default function AddEquipment() {
 
             {/* Serial Number */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Serial Number</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="qr-code-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Text style={[styles.label, { color: theme.colors.text }]}>Serial Number</Text>
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <Ionicons name="qr-code-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="SN239482"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.serial_number}
                   onChangeText={(value) => updateField('serial_number', value)}
                 />
@@ -273,13 +277,13 @@ export default function AddEquipment() {
 
             {/* Installation Date */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Installation Date</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="calendar-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Text style={[styles.label, { color: theme.colors.text }]}>Installation Date</Text>
+              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.colors.text }]}
                   placeholder="2023-05-20"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textSecondary}
                   value={formData.installation_date}
                   onChangeText={(value) => updateField('installation_date', value)}
                 />
@@ -288,20 +292,22 @@ export default function AddEquipment() {
 
             {/* Operational Status */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Operational Status</Text>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Operational Status</Text>
               <View style={styles.statusContainer}>
                 {['Active', 'Inactive', 'Under Maintenance', 'Retired'].map((status) => (
                   <TouchableOpacity
                     key={status}
                     style={[
                       styles.statusButton,
-                      formData.status === status && styles.statusButtonActive,
+                      { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                      formData.status === status && [styles.statusButtonActive, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
                     ]}
                     onPress={() => updateField('status', status)}
                   >
                     <Text
                       style={[
                         styles.statusButtonText,
+                        { color: theme.colors.textSecondary },
                         formData.status === status && styles.statusButtonTextActive,
                       ]}
                     >
@@ -315,12 +321,12 @@ export default function AddEquipment() {
 
           {/* Preview Card */}
           {Object.values(formData).some(val => val) && (
-            <View style={styles.previewCard}>
-              <Text style={styles.previewTitle}>Equipment Preview</Text>
+            <View style={[styles.previewCard, { backgroundColor: theme.dark ? '#0c4a6e' : '#F0F9FF', borderColor: theme.dark ? '#075985' : '#E0F2FE' }]}>
+              <Text style={[styles.previewTitle, { color: theme.dark ? '#7dd3fc' : '#0369A1' }]}>Equipment Preview</Text>
               <View style={styles.previewContent}>
-                <Text style={styles.previewId}>{formData.equipment_id || 'EQP-XXX'}</Text>
-                <Text style={styles.previewName}>{formData.name || 'Equipment Name'}</Text>
-                <View style={styles.previewBadge}>
+                <Text style={[styles.previewId, { color: theme.dark ? '#7dd3fc' : '#0369A1' }]}>{formData.equipment_id || 'EQP-XXX'}</Text>
+                <Text style={[styles.previewName, { color: theme.colors.text }]}>{formData.name || 'Equipment Name'}</Text>
+                <View style={[styles.previewBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                   <View style={[
                     styles.statusDot,
                     {
@@ -331,10 +337,10 @@ export default function AddEquipment() {
                               formData.status === 'Inactive' ? '#6B7280' : '#EF4444'
                     }
                   ]} />
-                  <Text style={styles.previewStatus}>{formData.status}</Text>
+                  <Text style={[styles.previewStatus, { color: theme.colors.text }]}>{formData.status}</Text>
                 </View>
                 {formData.location && (
-                  <Text style={styles.previewLocation}>
+                  <Text style={[styles.previewLocation, { color: theme.dark ? '#7dd3fc' : '#0369A1' }]}>
                     <Ionicons name="location-outline" size={12} /> {formData.location}
                   </Text>
                 )}
@@ -345,9 +351,9 @@ export default function AddEquipment() {
       </ScrollView>
 
       {/* Submit Button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
         <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+          style={[styles.submitButton, { backgroundColor: theme.colors.primary }, loading && [styles.submitButtonDisabled, { backgroundColor: theme.colors.border }]]}
           onPress={handleSubmit}
           disabled={loading}
         >
@@ -365,24 +371,24 @@ export default function AddEquipment() {
       {/* QR Code Modal */}
       <Modal visible={showQRModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Equipment Added Successfully</Text>
+              <Text style={[styles.modalTitle, { color: theme.colors.success }]}>Equipment Added Successfully</Text>
               <TouchableOpacity onPress={() => { setShowQRModal(false); router.back(); }}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <View style={styles.qrContainer}>
+            <View style={[styles.qrContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
               <QRCode
                 value={formData.equipment_id}
                 size={200}
                 getRef={(c) => (qrRef.current = c)}
-                color="#111827"
-                backgroundColor="#FFFFFF"
+                color={theme.dark ? '#FFFFFF' : '#111827'}
+                backgroundColor={theme.colors.surface}
               />
-              <Text style={styles.qrCaption}>Scan this QR code using the app</Text>
+              <Text style={[styles.qrCaption, { color: theme.colors.textSecondary }]}>Scan this QR code using the app</Text>
             </View>
-            <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadQR}>
+            <TouchableOpacity style={[styles.downloadButton, { backgroundColor: theme.colors.primary }]} onPress={handleDownloadQR}>
               <Ionicons name="download-outline" size={20} color="#FFFFFF" />
               <Text style={styles.downloadButtonText}>Save QR Code to Gallery</Text>
             </TouchableOpacity>

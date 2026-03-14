@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 interface ChecklistItem {
   id: number;
@@ -24,6 +26,7 @@ interface ChecklistItem {
 }
 
 export default function RoutineExecute() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
   const scheduleId = Number(params.id) || 0;
@@ -167,14 +170,15 @@ export default function RoutineExecute() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading checklist...</Text>
+        <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading checklist...</Text>
         </View>
       </SafeAreaView>
     );
@@ -184,56 +188,56 @@ export default function RoutineExecute() {
   const progress = items.length > 0 ? (completedCount / items.length) * 100 : 0;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
       <KeyboardAvoidingView 
-        style={styles.container}
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
+        <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Execute {scheduleType}</Text>
-            <Text style={styles.headerSubtitle}>{equipmentName} ({equipmentId})</Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Execute {scheduleType}</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{equipmentName} ({equipmentId})</Text>
           </View>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           
-          <View style={styles.progressSection}>
+          <View style={[styles.progressSection, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>Progress</Text>
-              <Text style={styles.progressText}>{completedCount} of {items.length} completed</Text>
+              <Text style={[styles.progressTitle, { color: theme.colors.text }]}>Progress</Text>
+              <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>{completedCount} of {items.length} completed</Text>
             </View>
-            <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+            <View style={[styles.progressBarBg, { backgroundColor: theme.colors.background }]}>
+              <View style={[styles.progressBarFill, { backgroundColor: theme.colors.success, width: `${progress}%` }]} />
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Checklist Items</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Checklist Items</Text>
             {items.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Ionicons name="list-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No checklist defined for this equipment.</Text>
+              <View style={[styles.emptyCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <Ionicons name="list-outline" size={48} color={theme.colors.border} />
+                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No checklist defined for this equipment.</Text>
               </View>
             ) : (
-              <View style={styles.taskList}>
+              <View style={[styles.taskList, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                 {items.map((item, index) => (
                   <TouchableOpacity 
                     key={item.id} 
-                    style={[styles.taskItem, item.is_completed && styles.taskItemCompleted]}
+                    style={[styles.taskItem, { borderBottomColor: theme.colors.border }, item.is_completed && [styles.taskItemCompleted, { backgroundColor: theme.colors.background }]]}
                     onPress={() => toggleItem(item.id)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.checkbox, item.is_completed && styles.checkboxActive]}>
+                    <View style={[styles.checkbox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, item.is_completed && [styles.checkboxActive, { backgroundColor: theme.colors.success, borderColor: theme.colors.success }]]}>
                       {item.is_completed && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
                     </View>
                     <View style={styles.taskContent}>
-                      <Text style={[styles.taskDesc, item.is_completed && styles.taskDescCompleted]}>
+                      <Text style={[styles.taskDesc, { color: theme.colors.text }, item.is_completed && [styles.taskDescCompleted, { color: theme.colors.textSecondary }]]}>
                         {item.task_description}
                       </Text>
                     </View>
@@ -244,20 +248,22 @@ export default function RoutineExecute() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Completion Details</Text>
-            <View style={styles.inputCard}>
-              <Text style={styles.inputLabel}>Performed By *</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Completion Details</Text>
+            <View style={[styles.inputCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Performed By *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="Enter mechanic/engineer name"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={maintainer}
                 onChangeText={setMaintainer}
               />
               
-              <Text style={[styles.inputLabel, { marginTop: 16 }]}>Remarks / Observations</Text>
+              <Text style={[styles.inputLabel, { marginTop: 16, color: theme.colors.textSecondary }]}>Remarks / Observations</Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[styles.input, styles.textArea, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="Notes on condition, issues found, etc."
+                placeholderTextColor={theme.colors.textSecondary}
                 value={remarks}
                 onChangeText={setRemarks}
                 multiline
@@ -267,7 +273,7 @@ export default function RoutineExecute() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.submitButton} onPress={saveRoutineLog}>
+          <TouchableOpacity style={[styles.submitButton, { backgroundColor: theme.colors.primary }]} onPress={saveRoutineLog}>
             <Ionicons name="save-outline" size={20} color="#FFFFFF" />
             <Text style={styles.submitButtonText}>Commit Routine Log</Text>
           </TouchableOpacity>

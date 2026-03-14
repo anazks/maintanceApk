@@ -23,8 +23,10 @@ const SYSTEM_HEALTH = [
 
 import { useFocusEffect } from 'expo-router';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
 export default function Dashboard() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const [metrics, setMetrics] = React.useState({
     availability: '99.8%',
@@ -83,91 +85,91 @@ export default function Dashboard() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
+        <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>SUJATHA Analytics</Text>
-          <TouchableOpacity style={styles.addButtonSmall}>
-            <Ionicons name="download-outline" size={20} color="#2563EB" />
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>SUJATHA Analytics</Text>
+          <TouchableOpacity style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+            <Ionicons name="download-outline" size={20} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { backgroundColor: theme.colors.background }]}>
           
           {/* Main KPI Card */}
-          <View style={styles.kpiCard}>
+          <View style={[styles.kpiCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={styles.kpiHeader}>
-              <Text style={styles.kpiTitle}>Overall OEE</Text>
-              <View style={styles.kpiBadge}>
-                <Ionicons name="trending-up" size={12} color="#10B981" />
-                <Text style={styles.kpiBadgeText}>+2.4%</Text>
+              <Text style={[styles.kpiTitle, { color: theme.colors.textSecondary }]}>Overall OEE</Text>
+              <View style={[styles.kpiBadge, { backgroundColor: theme.dark ? '#064e3b' : '#D1FAE5' }]}>
+                <Ionicons name="trending-up" size={12} color={theme.colors.success} />
+                <Text style={[styles.kpiBadgeText, { color: theme.colors.success }]}>+2.4%</Text>
               </View>
             </View>
             <View style={styles.kpiContent}>
-              <Text style={styles.kpiValue}>{metrics.oee}<Text style={styles.kpiSymbol}>%</Text></Text>
-              <Text style={styles.kpiSubtitle}>Target: 85.0%</Text>
+              <Text style={[styles.kpiValue, { color: theme.colors.text }]}>{metrics.oee}<Text style={[styles.kpiSymbol, { color: theme.colors.textSecondary }]}>%</Text></Text>
+              <Text style={[styles.kpiSubtitle, { color: theme.colors.textSecondary }]}>Target: 85.0%</Text>
             </View>
-            <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: `${metrics.oee}%` }]} />
+            <View style={[styles.progressBarBg, { backgroundColor: theme.colors.background }]}>
+              <View style={[styles.progressBarFill, { width: `${metrics.oee}%`, backgroundColor: theme.colors.primary }]} />
             </View>
           </View>
 
           {/* Grid Stats */}
           <View style={styles.statsGrid}>
-            <View style={styles.statBox}>
-              <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
-                <Ionicons name="flash-outline" size={20} color="#2563EB" />
+            <View style={[styles.statBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.dark ? '#1e3a8a' : '#EFF6FF' }]}>
+                <Ionicons name="flash-outline" size={20} color={theme.colors.primary} />
               </View>
-              <Text style={styles.statValue}>{metrics.availability}</Text>
-              <Text style={styles.statLabel}>Availability</Text>
+              <Text style={[styles.statValue, { color: theme.colors.text }]}>{metrics.availability}</Text>
+              <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Availability</Text>
             </View>
-            <View style={styles.statBox}>
-              <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
-                <Ionicons name="hourglass-outline" size={20} color="#EF4444" />
+            <View style={[styles.statBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.dark ? '#450a0a' : '#FEF2F2' }]}>
+                <Ionicons name="hourglass-outline" size={20} color={theme.colors.error} />
               </View>
-              <Text style={styles.statValue}>{metrics.downtime}</Text>
-              <Text style={styles.statLabel}>Est. Downtime</Text>
+              <Text style={[styles.statValue, { color: theme.colors.text }]}>{metrics.downtime}</Text>
+              <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Est. Downtime</Text>
             </View>
           </View>
 
           <View style={styles.statsGrid}>
-            <View style={styles.statBox}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFF7ED' }]}>
+            <View style={[styles.statBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.dark ? '#431407' : '#FFF7ED' }]}>
                 <Ionicons name="construct-outline" size={20} color="#F97316" />
               </View>
-              <Text style={styles.statValue}>{metrics.mttr}</Text>
-              <Text style={styles.statLabel}>MTTR</Text>
+              <Text style={[styles.statValue, { color: theme.colors.text }]}>{metrics.mttr}</Text>
+              <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>MTTR</Text>
             </View>
-            <View style={styles.statBox}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <Ionicons name="checkmark-done-circle-outline" size={20} color="#10B981" />
+            <View style={[styles.statBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <View style={[styles.iconBox, { backgroundColor: theme.dark ? '#064e3b' : '#D1FAE5' }]}>
+                <Ionicons name="checkmark-done-circle-outline" size={20} color={theme.colors.success} />
               </View>
-              <Text style={styles.statValue}>{metrics.mtbf}</Text>
-              <Text style={styles.statLabel}>MTBF</Text>
+              <Text style={[styles.statValue, { color: theme.colors.text }]}>{metrics.mtbf}</Text>
+              <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>MTBF</Text>
             </View>
           </View>
 
           {/* System Health Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>System Health</Text>
-            <View style={styles.healthCard}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>System Health</Text>
+            <View style={[styles.healthCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
               {metrics.systemHealth.map((system, index) => (
-                <View key={system.name} style={[styles.healthRow, index === metrics.systemHealth.length - 1 && styles.healthRowLast]}>
+                <View key={system.name} style={[styles.healthRow, { borderBottomColor: theme.colors.border }, index === metrics.systemHealth.length - 1 && styles.healthRowLast]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.healthName}>{system.name}</Text>
-                    <View style={styles.healthBarBg}>
+                    <Text style={[styles.healthName, { color: theme.colors.text }]}>{system.name}</Text>
+                    <View style={[styles.healthBarBg, { backgroundColor: theme.colors.background }]}>
                       <View style={[styles.healthBarFill, { width: `${system.score}%`, backgroundColor: system.color }]} />
                     </View>
                   </View>
                   <View style={styles.healthScoreContainer}>
                     <Text style={[styles.healthScore, { color: system.color }]}>{system.score}%</Text>
-                    <Text style={styles.healthStatus}>{system.status}</Text>
+                    <Text style={[styles.healthStatus, { color: theme.colors.textSecondary }]}>{system.status}</Text>
                   </View>
                 </View>
               ))}

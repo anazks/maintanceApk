@@ -5,19 +5,22 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function TabLayout() {
+  const { theme, isDarkMode } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#2563EB', // Brand blue
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textSecondary,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: theme.colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#F3F4F6',
+          borderTopColor: theme.colors.border,
           elevation: 0,
           shadowOpacity: 0,
           height: 60,
@@ -38,23 +41,21 @@ export default function TabLayout() {
             ),
           }}
         />
-        <Tabs.Screen
-          name="routines"
-          options={{
-            title: 'Routines',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar-outline" size={size} color={color} />
-            ),
-          }}
-        />
 
-      
       {/* Settings Tab */}
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="gearshape.fill" color={color} />,
+        }}
+      />
+      {/* Preferences Tab */}
+      <Tabs.Screen
+        name="preferences"
+        options={{
+          title: 'Preferences',
+          tabBarIcon: ({ color }) => <Ionicons name="options-outline" size={24} color={color} />,
         }}
       />
     </Tabs>

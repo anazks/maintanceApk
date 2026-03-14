@@ -14,88 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDB } from '../database';
+import { useTheme } from '../context/ThemeContext';
 
-// Sample data
-const SAMPLE_EQUIPMENT: Equipment[] = [
-  {
-    id: 1,
-    equipment_id: 'EQP-001',
-    name: 'Cooling Pump',
-    section: 'Water Treatment',
-    location: 'Plant Room 2',
-    manufacturer: 'Siemens',
-    model_number: 'SPM-450',
-    serial_number: 'SN239482',
-    installation_date: '2023-05-20',
-    status: 'Active',
-    last_maintenance: '2024-01-15',
-  },
-  {
-    id: 2,
-    equipment_id: 'EQP-002',
-    name: 'Hydraulic Press',
-    section: 'Manufacturing',
-    location: 'Production Hall A',
-    manufacturer: 'Bosch',
-    model_number: 'HP-3000',
-    serial_number: 'SN873421',
-    installation_date: '2023-08-10',
-    status: 'Maintenance',
-    last_maintenance: '2024-02-01',
-  },
-  {
-    id: 3,
-    equipment_id: 'EQP-003',
-    name: 'Conveyor Belt',
-    section: 'Packaging',
-    location: 'Line 3',
-    manufacturer: 'Festo',
-    model_number: 'CB-200',
-    serial_number: 'SN456782',
-    installation_date: '2023-11-05',
-    status: 'Active',
-    last_maintenance: '2024-01-28',
-  },
-  {
-    id: 4,
-    equipment_id: 'EQP-004',
-    name: 'Air Compressor',
-    section: 'Utilities',
-    location: 'Machine Room',
-    manufacturer: 'Atlas Copco',
-    model_number: 'AC-150',
-    serial_number: 'SN982345',
-    installation_date: '2023-03-15',
-    status: 'Inactive',
-    last_maintenance: '2023-12-10',
-  },
-  {
-    id: 5,
-    equipment_id: 'EQP-005',
-    name: 'CNC Machine',
-    section: 'Machining',
-    location: 'Workshop B',
-    manufacturer: 'Haas',
-    model_number: 'VF-2',
-    serial_number: 'SN567890',
-    installation_date: '2023-09-22',
-    status: 'Active',
-    last_maintenance: '2024-02-05',
-  },
-  {
-    id: 6,
-    equipment_id: 'EQP-006',
-    name: 'Industrial Fan',
-    section: 'Ventilation',
-    location: 'Roof Level',
-    manufacturer: 'Greenheck',
-    model_number: 'IF-75',
-    serial_number: 'SN123456',
-    installation_date: '2023-12-01',
-    status: 'Maintenance',
-    last_maintenance: '2024-01-20',
-  },
-];
 
 interface Equipment {
   id: number;
@@ -113,6 +33,7 @@ interface Equipment {
 }
 
 export default function EquipmentList() {
+  const { theme, isDarkMode } = useTheme();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -169,10 +90,9 @@ export default function EquipmentList() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setEquipment(SAMPLE_EQUIPMENT);
-      setRefreshing(false);
-    }, 1000);
+    // Reload actual data instead of setting dummy content
+    loadEquipment();
+    setRefreshing(false);
   };
 
   // Function to get status colors
@@ -199,56 +119,56 @@ export default function EquipmentList() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text style={styles.loadingText}>Loading equipment...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading equipment...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
-          </TouchableOpacity>
-          <View style={{flex: 1, marginLeft: 16}}>
-            <Text style={styles.brandTitle}>SUJATHA Fleet</Text>
-            <Text style={styles.headerSubtitle}>Equipment Inventory & Status</Text>
-          </View>
+          <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+            <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <View style={{flex: 1, marginLeft: 16}}>
+              <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA Fleet</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Equipment Inventory & Status</Text>
+            </View>
           <TouchableOpacity
-            style={styles.addButtonSmall}
+            style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
             onPress={() => router.push('/add-equipment')}
           >
-            <Ionicons name="add" size={24} color="#2563EB" />
+            <Ionicons name="add" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={20} color="#9CA3AF" />
+        <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
+          <View style={[styles.searchBar, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="search-outline" size={20} color={theme.colors.textSecondary} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.colors.text }]}
               placeholder="Search by name, ID, section..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
         </View>
 
         {/* Filter Tabs */}
-        <View style={styles.filterContainer}>
+        <View style={[styles.filterContainer, { backgroundColor: theme.colors.surface }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -259,13 +179,15 @@ export default function EquipmentList() {
                 key={filter}
                 style={[
                   styles.filterChip,
-                  selectedFilter === filter && styles.filterChipActive,
+                  { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                  selectedFilter === filter && [styles.filterChipActive, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
                 ]}
                 onPress={() => setSelectedFilter(filter)}
               >
                 <Text
                   style={[
                     styles.filterChipText,
+                    { color: theme.colors.textSecondary },
                     selectedFilter === filter && styles.filterChipTextActive,
                   ]}
                 >
@@ -277,24 +199,24 @@ export default function EquipmentList() {
         </View>
 
         {/* Stats Summary */}
-        <View style={styles.statsContainer}>
+        <View style={[styles.statsContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{equipment.length}</Text>
-            <Text style={styles.statLabel}>Total</Text>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{equipment.length}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Total</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
               {equipment.filter(e => e.status === 'Active').length}
             </Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Active</Text>
           </View>
-          <View style={styles.statDivider} />
+          <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>
+            <Text style={[styles.statNumber, { color: theme.colors.text }]}>
               {equipment.filter(e => e.status === 'Under Maintenance' || e.status === 'Maintenance').length}
             </Text>
-            <Text style={styles.statLabel}>Maintenance</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Maintenance</Text>
           </View>
         </View>
 
@@ -303,7 +225,7 @@ export default function EquipmentList() {
           data={filteredEquipment}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
               onPress={() => router.push({
                 pathname: '/equipment-details',
                 params: { id: item.id }
@@ -312,36 +234,36 @@ export default function EquipmentList() {
             >
               <View style={styles.cardHeader}>
                 <View style={styles.idContainer}>
-                  <Text style={styles.equipmentId}>{item.equipment_id}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusBackgroundColor(item.status) }]}>
+                  <Text style={[styles.equipmentId, { color: theme.colors.primary }]}>{item.equipment_id}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: theme.dark ? (item.status === 'Active' ? '#064e3b' : (item.status === 'Inactive' ? '#374151' : '#451a03')) : getStatusBackgroundColor(item.status) }]}>
                     <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />
                     <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
                       {item.status}
                     </Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
               </View>
 
-              <Text style={styles.equipmentName}>{item.name}</Text>
+              <Text style={[styles.equipmentName, { color: theme.colors.text }]}>{item.name}</Text>
 
               <View style={styles.detailsGrid}>
                 <View style={styles.detailItem}>
-                  <Ionicons name="layers-outline" size={16} color="#6B7280" />
-                  <Text style={styles.detailText}>{item.section}</Text>
+                  <Ionicons name="layers-outline" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>{item.section}</Text>
                 </View>
                 <View style={styles.detailItem}>
-                  <Ionicons name="location-outline" size={16} color="#6B7280" />
-                  <Text style={styles.detailText}>{item.location}</Text>
+                  <Ionicons name="location-outline" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>{item.location}</Text>
                 </View>
               </View>
 
-              <View style={styles.cardFooter}>
+              <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
                 <View style={styles.manufacturerContainer}>
-                  <Ionicons name="business-outline" size={14} color="#9CA3AF" />
-                  <Text style={styles.manufacturerText}>{item.manufacturer}</Text>
+                  <Ionicons name="business-outline" size={14} color={theme.colors.textSecondary} />
+                  <Text style={[styles.manufacturerText, { color: theme.colors.textSecondary }]}>{item.manufacturer}</Text>
                 </View>
-                <Text style={styles.maintenanceText}>
+                <Text style={[styles.maintenanceText, { color: theme.colors.textSecondary }]}>
                   Last: {item.last_maintenance}
                 </Text>
               </View>
@@ -354,16 +276,16 @@ export default function EquipmentList() {
           onRefresh={handleRefresh}
           ListEmptyComponent={() => (
             <View style={styles.emptyState}>
-              <Ionicons name="cube-outline" size={64} color="#E5E7EB" />
-              <Text style={styles.emptyStateTitle}>No Equipment Found</Text>
-              <Text style={styles.emptyStateText}>
+              <Ionicons name="cube-outline" size={64} color={theme.colors.border} />
+              <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>No Equipment Found</Text>
+              <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
                 {searchQuery
                   ? 'Try adjusting your search or filters'
                   : 'Add your first equipment to get started'}
               </Text>
               {!searchQuery && (
                 <TouchableOpacity
-                  style={styles.addButton}
+                  style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
                   onPress={() => router.push('/add-equipment')}
                 >
                   <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
@@ -381,22 +303,25 @@ export default function EquipmentList() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+  },
+  centeredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',
@@ -405,46 +330,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   brandTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#2563EB',
     letterSpacing: -0.5,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#6B7280',
     marginTop: 2,
   },
   addButtonSmall: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 44,
@@ -457,7 +374,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   filterContainer: {
-    backgroundColor: '#FFFFFF',
     paddingBottom: 12,
   },
   filterScroll: {
@@ -468,31 +384,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
   filterChipActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
   },
   filterChipText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#4B5563',
   },
   filterChipTextActive: {
     color: '#FFFFFF',
   },
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginVertical: 16,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
   },
   statBox: {
     flex: 1,
@@ -501,18 +410,15 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#6B7280',
     fontWeight: '500',
   },
   statDivider: {
     width: 1,
     height: '80%',
-    backgroundColor: '#E5E7EB',
     marginHorizontal: 8,
   },
   listContainer: {
@@ -521,12 +427,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
@@ -570,7 +474,6 @@ const styles = StyleSheet.create({
   equipmentName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
     marginBottom: 12,
   },
   detailsGrid: {
@@ -617,7 +520,6 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
     marginTop: 16,
     marginBottom: 8,
   },
