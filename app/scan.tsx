@@ -12,7 +12,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { getDB } from '../database';
 import { useTheme } from '../context/ThemeContext';
@@ -356,9 +357,8 @@ export default function ScanEquipment() {
                         router.push({
                           pathname: '/routine-history',
                           params: {
-                            equipment_id: (scannedData?.id || scannedData?.equipment_id || equipmentId)?.toString(),
-                            equipment_name: equipmentName || scannedData?.name,
-                            equip_sys_id: scannedData?.equipment_id
+                            equipmentId: (scannedData?.id || scannedData?.equipment_id || equipmentId)?.toString(),
+                            equipmentName: equipmentName || scannedData?.name
                           }
                         });
                       }}
@@ -483,9 +483,8 @@ export default function ScanEquipment() {
                     router.push({
                       pathname: '/routine-history',
                       params: {
-                        equipment_id: (scannedData?.id || scannedData?.equipment_id || equipmentId)?.toString(),
-                        equipment_name: equipmentName || scannedData?.name,
-                        equip_sys_id: scannedData?.equipment_id
+                        equipmentId: (scannedData?.id || scannedData?.equipment_id || equipmentId)?.toString(),
+                        equipmentName: equipmentName || scannedData?.name
                       }
                     });
                   }}
@@ -527,64 +526,71 @@ export default function ScanEquipment() {
       {/* Defect Reporting Modal */}
       <Modal visible={showDefectModal} transparent animationType="fade">
         <View style={styles.defectModalOverlay}>
-          <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface }]}>
-            <View style={styles.defectModalHeader}>
-              <Text style={[styles.defectModalTitle, { color: theme.colors.text }]}>Report Defect</Text>
-              <TouchableOpacity onPress={() => setShowDefectModal(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.defectModalSub, { color: theme.colors.textSecondary }]}>Identifying an issue for {equipmentName || 'this asset'}</Text>
-
-            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Issue Title</Text>
-            <TextInput
-              style={[styles.defectInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder="e.g. Unusual noise from motor"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={defectForm.title}
-              onChangeText={t => setDefectForm(f => ({ ...f, title: t }))}
-            />
-
-            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Priority</Text>
-            <View style={styles.priorityRow}>
-              {['Low', 'Medium', 'High', 'Critical'].map(p => (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.priorityChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, defectForm.priority === p && [styles.priorityChipActive, { backgroundColor: theme.colors.primary, borderColor: 'transparent' }]]}
-                  onPress={() => setDefectForm(f => ({ ...f, priority: p }))}
-                >
-                  <Text style={[styles.priorityChipText, { color: theme.colors.textSecondary }, defectForm.priority === p && [styles.priorityChipTextActive, { color: '#FFFFFF' }]]}>{p}</Text>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface }]}>
+              <View style={styles.defectModalHeader}>
+                <Text style={[styles.defectModalTitle, { color: theme.colors.text }]}>Report Defect</Text>
+                <TouchableOpacity onPress={() => setShowDefectModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
-              ))}
+              </View>
+              <Text style={[styles.defectModalSub, { color: theme.colors.textSecondary }]}>Identifying an issue for {equipmentName || 'this asset'}</Text>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Issue Title</Text>
+                <TextInput
+                  style={[styles.defectInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="e.g. Unusual noise from motor"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={defectForm.title}
+                  onChangeText={t => setDefectForm(f => ({ ...f, title: t }))}
+                />
+
+                <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Priority</Text>
+                <View style={styles.priorityRow}>
+                  {['Low', 'Medium', 'High', 'Critical'].map(p => (
+                    <TouchableOpacity
+                      key={p}
+                      style={[styles.priorityChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, defectForm.priority === p && [styles.priorityChipActive, { backgroundColor: theme.colors.primary, borderColor: 'transparent' }]]}
+                      onPress={() => setDefectForm(f => ({ ...f, priority: p }))}
+                    >
+                      <Text style={[styles.priorityChipText, { color: theme.colors.textSecondary }, defectForm.priority === p && [styles.priorityChipTextActive, { color: '#FFFFFF' }]]}>{p}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Reported By *</Text>
+                <TextInput
+                  style={[styles.defectInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="Enter your name"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={defectForm.reportedBy}
+                  onChangeText={t => setDefectForm(f => ({ ...f, reportedBy: t }))}
+                />
+
+                <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Detailed Description</Text>
+                <TextInput
+                  style={[styles.defectInput, { height: 100, textAlignVertical: 'top', backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="Describe the problem in detail..."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  multiline
+                  value={defectForm.description}
+                  onChangeText={t => setDefectForm(f => ({ ...f, description: t }))}
+                />
+
+                <TouchableOpacity
+                  style={[styles.defectSubmitBtn, { backgroundColor: theme.colors.error }, defectLoading && { opacity: 0.7 }]}
+                  onPress={submitDefect}
+                  disabled={defectLoading}
+                >
+                  <Text style={styles.defectSubmitText}>{defectLoading ? 'Saving...' : 'Submit Defect Report'}</Text>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
-
-            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Reported By *</Text>
-            <TextInput
-              style={[styles.defectInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder="Enter your name"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={defectForm.reportedBy}
-              onChangeText={t => setDefectForm(f => ({ ...f, reportedBy: t }))}
-            />
-
-            <Text style={[styles.defectLabel, { color: theme.colors.textSecondary }]}>Detailed Description</Text>
-            <TextInput
-              style={[styles.defectInput, { height: 100, textAlignVertical: 'top', backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder="Describe the problem in detail..."
-              placeholderTextColor={theme.colors.textSecondary}
-              multiline
-              value={defectForm.description}
-              onChangeText={t => setDefectForm(f => ({ ...f, description: t }))}
-            />
-
-            <TouchableOpacity
-              style={[styles.defectSubmitBtn, { backgroundColor: theme.colors.error }, defectLoading && { opacity: 0.7 }]}
-              onPress={submitDefect}
-              disabled={defectLoading}
-            >
-              <Text style={styles.defectSubmitText}>{defectLoading ? 'Saving...' : 'Submit Defect Report'}</Text>
-            </TouchableOpacity>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -747,7 +753,7 @@ export default function ScanEquipment() {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '80%',
+    maxHeight: '94%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1117,6 +1123,7 @@ export default function ScanEquipment() {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 24,
+    maxHeight: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,

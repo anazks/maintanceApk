@@ -1,11 +1,19 @@
 import * as SQLite from 'expo-sqlite';
 
-// Open database synchronously (Expo SQLite API)
-const db = SQLite.openDatabaseSync('maintenance.db');
+let db: SQLite.SQLiteDatabase | null = null;
+
+export const getDB = () => {
+  if (!db) {
+    db = SQLite.openDatabaseSync('sujatha.db');
+  }
+  return db;
+};
 
 export const initDB = () => {
+  const currentDb = getDB();
   try {
-    db.execSync(`
+    currentDb.execSync(`
+      -- [Schema remains same, using currentDb instead of db]
       -- Equipment Table
       CREATE TABLE IF NOT EXISTS Equipment (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,6 +26,10 @@ export const initDB = () => {
         serial_number TEXT,
         installation_date TEXT,
         status TEXT DEFAULT 'Active',
+        maintained_by TEXT,
+        maintenance_start_date TEXT,
+        expected_completion_date TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -25,9 +37,10 @@ export const initDB = () => {
       CREATE TABLE IF NOT EXISTS Maintenance_Schedule (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         equipment_id INTEGER NOT NULL,
-        schedule_type TEXT NOT NULL, -- Daily, Weekly, Monthly, Quarterly, Yearly
+        schedule_type TEXT NOT NULL,
         last_maintenance TEXT,
         next_maintenance TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id)
       );
 
@@ -36,6 +49,7 @@ export const initDB = () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         schedule_id INTEGER NOT NULL,
         task_description TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (schedule_id) REFERENCES Maintenance_Schedule (id)
       );
 
@@ -48,15 +62,17 @@ export const initDB = () => {
         remarks TEXT,
         maintenance_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'Completed',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id)
       );
 
-      -- Log Items (Individual checklist tick box results)
+      -- Log Items
       CREATE TABLE IF NOT EXISTS Maintenance_Log_Items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         log_id INTEGER NOT NULL,
         checklist_item_id INTEGER NOT NULL,
         is_completed BOOLEAN DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (log_id) REFERENCES Maintenance_Log (id),
         FOREIGN KEY (checklist_item_id) REFERENCES Checklist_Items (id)
       );
@@ -68,10 +84,11 @@ export const initDB = () => {
         reported_by TEXT DEFAULT 'Inspector',
         title TEXT NOT NULL,
         description TEXT NOT NULL,
-        priority TEXT DEFAULT 'Medium', -- Low, Medium, High, Critical
+        priority TEXT DEFAULT 'Medium',
         corrective_action TEXT,
-        status TEXT DEFAULT 'Open', -- Open, Under Repair, Closed
+        status TEXT DEFAULT 'Open',
         report_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id)
       );
 
@@ -86,15 +103,17 @@ export const initDB = () => {
         price TEXT,
         location TEXT,
         keeper_name TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         date_added DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Equipment-Spare Parts Linking (Many to Many)
+      -- Equipment-Spare Parts Linking
       CREATE TABLE IF NOT EXISTS Equipment_Spares (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         equipment_id INTEGER,
         spare_id INTEGER,
         linked_by TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id),
         FOREIGN KEY (spare_id) REFERENCES Spare_Parts (id)
       );
@@ -107,6 +126,7 @@ export const initDB = () => {
         quantity_used INTEGER NOT NULL,
         maintainer_name TEXT,
         used_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (spare_id) REFERENCES Spare_Parts (id),
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id)
       );
@@ -117,119 +137,105 @@ export const initDB = () => {
         name TEXT UNIQUE NOT NULL
       );
 
-      -- Users Table for RBAC
+      -- Users Table
       CREATE TABLE IF NOT EXISTS Users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'Staff', -- Admin, Staff
+        role TEXT NOT NULL DEFAULT 'Staff',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Vessels Table
+      CREATE TABLE IF NOT EXISTS Vessels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Equipment-Vessels Linking
+      CREATE TABLE IF NOT EXISTS Equipment_Vessels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        equipment_id INTEGER NOT NULL,
+        vessel_id INTEGER NOT NULL,
+        FOREIGN KEY (equipment_id) REFERENCES Equipment (id),
+        FOREIGN KEY (vessel_id) REFERENCES Vessels (id)
       );
     `);
 
-    // Seed Super Admin if not exists
+    // Seed Admin
     try {
-      const adminExists = db.getFirstSync<{id: number}>('SELECT id FROM Users WHERE username = ?', ['sujatha']);
+      const adminExists = currentDb.getFirstSync<{id: number}>('SELECT id FROM Users WHERE username = ?', ['sujatha']);
       if (!adminExists) {
-        db.runSync(
+        currentDb.runSync(
           'INSERT INTO Users (username, password, role) VALUES (?, ?, ?)',
           ['sujatha', '1234@qwer', 'Admin']
         );
-        console.log('Super Admin seeded successfully');
       }
     } catch (e) {
-      console.error('Failed to seed super admin', e);
+       console.error('Seed error', e);
     }
 
-    // Insert Default Categories if none exist
+    // Default Categories
     try {
-      const dbCategories = db.getAllSync<{id: number}>('SELECT id FROM Spare_Categories LIMIT 1');
+      const dbCategories = currentDb.getAllSync<{id: number}>('SELECT id FROM Spare_Categories LIMIT 1');
       if (dbCategories.length === 0) {
-        db.execSync(`
+        currentDb.execSync(`
           INSERT INTO Spare_Categories (name) VALUES 
-          ('Mechanical'),
-          ('Electrical'),
-          ('Consumables'),
-          ('Tools')
+          ('Mechanical'), ('Electrical'), ('Consumables'), ('Tools')
         `);
       }
-    } catch (e) {
-      console.error('Failed to initialize default categories', e);
-    }
+    } catch (e) { }
     
-    try {
-      db.execSync('ALTER TABLE Spare_Usage ADD COLUMN maintainer_name TEXT;');
-    } catch (e) {
-      // Column already exists
-    }
+    // Migrations
+    const tablesToAlter = [
+      { t: 'Spare_Usage', c: 'maintainer_name', d: 'TEXT' },
+      { t: 'Spare_Parts', c: 'keeper_name', d: 'TEXT' },
+      { t: 'Equipment_Spares', c: 'linked_by', d: 'TEXT' },
+      { t: 'Spare_Parts', c: 'date_added', d: "TEXT DEFAULT ''" },
+      { t: 'Defects', c: 'reported_by', d: "TEXT DEFAULT 'Inspector'" },
+      { t: 'Defects', c: 'priority', d: "TEXT DEFAULT 'Medium'" },
+      { t: 'Defects', c: 'report_date', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Equipment', c: 'maintained_by', d: 'TEXT' },
+      { t: 'Equipment', c: 'maintenance_start_date', d: 'TEXT' },
+      { t: 'Equipment', c: 'expected_completion_date', d: 'TEXT' },
+      { t: 'Equipment', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Maintenance_Schedule', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Checklist_Items', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Maintenance_Log', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Maintenance_Log_Items', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Defects', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Spare_Parts', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Equipment_Spares', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+      { t: 'Spare_Usage', c: 'updated_at', d: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+    ];
 
-    try {
-      db.execSync('ALTER TABLE Spare_Parts ADD COLUMN keeper_name TEXT;');
-    } catch (e) {
-      // Column already exists
-    }
+    tablesToAlter.forEach(item => {
+      try {
+        currentDb.execSync(`ALTER TABLE ${item.t} ADD COLUMN ${item.c} ${item.d};`);
+      } catch (e) { }
+    });
 
+    // Verification
     try {
-      db.execSync('ALTER TABLE Equipment_Spares ADD COLUMN linked_by TEXT;');
-    } catch (e) {
-      // Column already exists
-    }
-
-    try {
-      db.execSync("ALTER TABLE Spare_Parts ADD COLUMN date_added TEXT DEFAULT '';");
-    } catch (e) {
-      // Column already exists
-    }
-
-    try {
-      db.execSync(`
-        DELETE FROM Spare_Parts WHERE name IN ('Ceramic Bearings', 'Cooling Fluid', 'Control Board');
-      `);
-    } catch (e) {
-      // Ignored
-    }
-
-    try {
-      db.execSync('ALTER TABLE Defects ADD COLUMN reported_by TEXT DEFAULT \'Inspector\';');
-    } catch (e) { /* Column already exists */ }
-
-    try {
-      db.execSync('ALTER TABLE Defects ADD COLUMN priority TEXT DEFAULT \'Medium\';');
-    } catch (e) { /* Column already exists */ }
-
-    try {
-      db.execSync('ALTER TABLE Defects ADD COLUMN report_date DATETIME DEFAULT CURRENT_TIMESTAMP;');
-    } catch (e) { /* Column already exists */ }
-
-    // Ensure all Equipment have all 5 routine types in Maintenance_Schedule
-    try {
-      const equipments = db.getAllSync<{id: number}>('SELECT id FROM Equipment');
+      const equipments = currentDb.getAllSync<{id: number}>('SELECT id FROM Equipment');
       const routines = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
-      
-      const insertStmt = db.prepareSync('INSERT INTO Maintenance_Schedule (equipment_id, schedule_type) VALUES (?, ?)');
+      const insertStmt = currentDb.prepareSync('INSERT INTO Maintenance_Schedule (equipment_id, schedule_type) VALUES (?, ?)');
 
       equipments.forEach(eq => {
         routines.forEach(type => {
-          const existing = db.getFirstSync<{id: number}>(
+          const existing = currentDb.getFirstSync<{id: number}>(
             'SELECT id FROM Maintenance_Schedule WHERE equipment_id = ? AND schedule_type = ?',
             [eq.id, type]
           );
-          if (!existing) {
-            insertStmt.executeSync([eq.id, type]);
-          }
+          if (!existing) insertStmt.executeSync([eq.id, type]);
         });
       });
-      
       insertStmt.finalizeSync();
-      console.log('Routine slots verified for all equipment');
-    } catch (e) {
-      console.error('Failed to backfill routine slots:', e);
-    }
+    } catch (e) { }
 
-    console.log('Database initialized successfully');
   } catch (error) {
-    console.error('Error initializing database:', error);
+    console.error('Database initialization failed:', error);
   }
 };
-
-export const getDB = () => db;

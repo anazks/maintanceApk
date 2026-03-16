@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
 import { getDB } from '../../database';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -142,6 +143,68 @@ export default function Preferences() {
     }
   };
 
+  const handleImportDatabase = async () => {
+    Alert.alert(
+      'Restore Database',
+      'This will OVERWRITE all current data with the backup file. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Proceed', 
+          onPress: async () => {
+            try {
+              const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*', // Allow all for now, filter in try/catch or logic
+                copyToCacheDirectory: true
+              });
+
+              if (result.canceled) return;
+
+              const pickedFile = result.assets[0];
+              
+              // Validate file extension loosely
+              if (!pickedFile.name.endsWith('.db') && !pickedFile.name.endsWith('.sqlite')) {
+                const proceedAnyway = await new Promise((resolve) => {
+                  Alert.alert(
+                    'Unknown File Type',
+                    'The selected file doesn\'t look like a database. Attempt to restore anyway?',
+                    [
+                      { text: 'Stop', onPress: () => resolve(false) },
+                      { text: 'Attempt', onPress: () => resolve(true) }
+                    ]
+                  );
+                });
+                if (!proceedAnyway) return;
+              }
+
+              const dbPath = `${FileSystem.documentDirectory}SQLite/sujatha.db`;
+              
+              // Ensure SQLite directory exists
+              const dirInfo = await FileSystem.getInfoAsync(`${FileSystem.documentDirectory}SQLite`);
+              if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}SQLite`, { intermediates: true });
+              }
+
+              await FileSystem.copyAsync({
+                from: pickedFile.uri,
+                to: dbPath
+              });
+
+              Alert.alert(
+                'Restore Successful',
+                'Database has been restored. You MUST restart the application now to see the updated data.',
+                [{ text: 'OK' }]
+              );
+            } catch (error) {
+              console.error('Import Error:', error);
+              Alert.alert('Error', 'Failed to restore database. Make sure the file is a valid SQLite backup.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const clearAllData = () => {
     Alert.alert('WARNING', 'This will permanently delete ALL data (Equipment, Schedules, Logs, Spares, etc). Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
@@ -171,7 +234,7 @@ export default function Preferences() {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>App Preferences</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>SUJATHA Preferences</Text>
           <TouchableOpacity onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={24} color={theme.colors.error} />
           </TouchableOpacity>
@@ -269,6 +332,37 @@ export default function Preferences() {
           </View>
 
           <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Offline Data Sharing</Text>
+            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Send or receive data without internet</Text>
+            
+            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <TouchableOpacity style={styles.syncRow} onPress={handleExportDatabase}>
+                <View style={styles.syncIconContainer}>
+                  <Ionicons name="bluetooth-outline" size={24} color={theme.colors.primary} />
+                </View>
+                <View style={styles.syncContent}>
+                  <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Share My Data</Text>
+                  <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Export backup to another device</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+
+              <View style={[styles.divider, { marginVertical: 12 }]} />
+
+              <TouchableOpacity style={styles.syncRow} onPress={handleImportDatabase}>
+                <View style={[styles.syncIconContainer, { backgroundColor: theme.colors.success + '15' }]}>
+                  <Ionicons name="download-outline" size={24} color={theme.colors.success} />
+                </View>
+                <View style={styles.syncContent}>
+                  <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Receive Data</Text>
+                  <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Restore from a backup file</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Data Management</Text>
             
             <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
@@ -286,15 +380,9 @@ export default function Preferences() {
               </View>
 
               <View style={styles.divider} />
-
-              <TouchableOpacity style={styles.actionRow} onPress={handleExportDatabase}>
-                <Text style={[styles.actionRowText, { color: theme.colors.text }]}>Export Database Backup</Text>
-                <Ionicons name="download-outline" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
               
               {isAdmin && (
                 <>
-                  <View style={styles.divider} />
                   <TouchableOpacity style={styles.actionRow} onPress={clearAllData}>
                     <Text style={[styles.actionRowText, { color: theme.colors.error }]}>Clear All App Data</Text>
                     <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
@@ -409,4 +497,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 15 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 24 },
   modalBtn: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  syncRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  syncIconContainer: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  syncContent: { flex: 1 },
 });

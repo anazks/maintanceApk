@@ -43,32 +43,46 @@ interface MaintenanceLog {
 export default function RoutineHistory() {
   const { theme, isDarkMode } = useTheme();
   const router = useRouter();
-  const { equipmentId, equipmentName } = useLocalSearchParams();
+  const { equipmentId, equipment_id, equipmentName } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
 
   const loadHistory = useCallback(() => {
-    if (!equipmentId) return;
     const db = getDB();
+    setLoading(true);
+    
     try {
-      // Get the internal ID if equipment_id (string) was passed
-      let internalId: number;
-      const equipIdStr = Array.isArray(equipmentId) ? equipmentId[0] : equipmentId;
+      // Use either camelCase or snake_case param
+      const rawId = equipmentId || equipment_id;
+      if (!rawId) {
+        setLoading(false);
+        return;
+      }
 
-      if (isNaN(Number(equipIdStr))) {
-        const eqRec = db.getFirstSync<{ id: number }>('SELECT id FROM Equipment WHERE equipment_id = ?', [equipIdStr]);
-        if (!eqRec) {
+      const equipIdStr = Array.isArray(rawId) ? rawId[0] : rawId;
+      let internalId: number;
+      
+      // Try to find if this equipment exists by string ID first, 
+      // because string IDs could be numeric (e.g. "1001")
+      const eqByStringId = db.getFirstSync<{ id: number }>('SELECT id FROM Equipment WHERE equipment_id = ?', [equipIdStr]);
+      
+      if (eqByStringId) {
+        internalId = eqByStringId.id;
+      } else {
+        // If not found by string ID, assume it's an internal ID if it's numeric
+        const numericId = Number(equipIdStr);
+        if (!isNaN(numericId)) {
+          internalId = numericId;
+        } else {
+          console.error('Could not resolve equipment ID:', equipIdStr);
           setLoading(false);
           return;
         }
-        internalId = eqRec.id;
-      } else {
-        internalId = Number(equipIdStr);
       }
 
       const dbLogs = db.getAllSync<any>(
         'SELECT * FROM Maintenance_Log WHERE equipment_id = ? ORDER BY maintenance_date DESC',
-        [internalId.toString()]
+        [internalId]
       );
 
       const logsWithItems = dbLogs.map((log: any) => {
@@ -96,7 +110,7 @@ export default function RoutineHistory() {
       console.error('Error loading history:', error);
       setLoading(false);
     }
-  }, [equipmentId]);
+  }, [equipmentId, equipment_id]);
 
   useEffect(() => {
     loadHistory();

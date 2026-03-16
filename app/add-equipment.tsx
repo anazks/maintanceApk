@@ -28,6 +28,9 @@ export default function AddEquipment() {
   const [showQRModal, setShowQRModal] = useState(false);
   const qrRef = useRef<any>(null);
   
+  const [vessels, setVessels] = useState<{id: number, name: string, type: string}[]>([]);
+  const [selectedVessels, setSelectedVessels] = useState<number[]>([]);
+
   const [formData, setFormData] = useState({
     equipment_id: '',
     name: '',
@@ -42,19 +45,41 @@ export default function AddEquipment() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  React.useEffect(() => {
+    loadVessels();
+  }, []);
+
+  const loadVessels = () => {
+    const db = getDB();
+    try {
+      const dbVessels = db.getAllSync<{id: number, name: string, type: string}>('SELECT * FROM Vessels ORDER BY name');
+      setVessels(dbVessels);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleVessel = (id: number) => {
+    setSelectedVessels(prev => 
+      prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
+    );
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.equipment_id.trim()) newErrors.equipment_id = 'Equipment ID required';
     if (!formData.name.trim()) newErrors.name = 'Equipment name required';
-    if (!formData.section.trim()) newErrors.section = 'Section required';
-    if (!formData.location.trim()) newErrors.location = 'Location required';
+    if (selectedVessels.length === 0) newErrors.vessels = 'At least one vessel must be selected';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      Alert.alert('Required Fields', 'Please fill Equipment ID, Name and select at least one Vessel.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -71,6 +96,16 @@ export default function AddEquipment() {
         );
         
         const newEquipId = result.lastInsertRowId;
+
+        // Link Vessels
+        if (selectedVessels.length > 0) {
+          const vesselStmt = db.prepareSync('INSERT INTO Equipment_Vessels (equipment_id, vessel_id) VALUES (?, ?)');
+          selectedVessels.forEach(vId => {
+            vesselStmt.executeSync([newEquipId, vId]);
+          });
+          vesselStmt.finalizeSync();
+        }
+
         const routines = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
         const routineStmt = db.prepareSync('INSERT INTO Maintenance_Schedule (equipment_id, schedule_type) VALUES (?, ?)');
         
@@ -141,7 +176,7 @@ export default function AddEquipment() {
           {/* Required Fields Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Required Information</Text>
-            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Fields marked with * are required</Text>
+            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>These fields must be filled to save</Text>
 
             {/* Equipment ID */}
             <View style={styles.inputGroup}>
@@ -184,43 +219,50 @@ export default function AddEquipment() {
               )}
             </View>
 
-            {/* Section / System */}
+            {/* Vessel Selection */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.colors.text }]}>
-                Section / System <Text style={styles.requiredStar}>*</Text>
+                Applicable Ship/Submarine <Text style={styles.requiredStar}>*</Text>
               </Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, errors.section && styles.inputError]}>
-                <Ionicons name="layers-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { color: theme.colors.text }]}
-                  placeholder="Water Treatment"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={formData.section}
-                  onChangeText={(value) => updateField('section', value)}
-                />
+              <View style={[styles.statusContainer, errors.vessels && { borderColor: '#EF4444', borderWidth: 1, borderRadius: 12, padding: 8 }]}>
+                {vessels.map((vessel) => (
+                  <TouchableOpacity
+                    key={vessel.id}
+                    style={[
+                      styles.statusButton,
+                      { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                      selectedVessels.includes(vessel.id) && [styles.statusButtonActive, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
+                    ]}
+                    onPress={() => {
+                      toggleVessel(vessel.id);
+                      if (errors.vessels) setErrors(prev => ({ ...prev, vessels: '' }));
+                    }}
+                  >
+                    <Ionicons 
+                      name={vessel.type === 'Ship' ? 'boat-outline' : 'construct-outline'} 
+                      size={14} 
+                      color={selectedVessels.includes(vessel.id) ? '#FFF' : theme.colors.textSecondary} 
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={[
+                        styles.statusButtonText,
+                        { color: theme.colors.textSecondary },
+                        selectedVessels.includes(vessel.id) && styles.statusButtonTextActive,
+                      ]}
+                    >
+                      {vessel.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {vessels.length === 0 && (
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary, fontStyle: 'italic' }]}>
+                    No vessels found. Add them in Settings first.
+                  </Text>
+                )}
               </View>
-              {errors.section && (
-                <Text style={styles.errorText}>{errors.section}</Text>
-              )}
-            </View>
-
-            {/* Equipment Location */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>
-                Equipment Location <Text style={styles.requiredStar}>*</Text>
-              </Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, errors.location && styles.inputError]}>
-                <Ionicons name="location-outline" size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { color: theme.colors.text }]}
-                  placeholder="Plant Room 2"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={formData.location}
-                  onChangeText={(value) => updateField('location', value)}
-                />
-              </View>
-              {errors.location && (
-                <Text style={styles.errorText}>{errors.location}</Text>
+              {errors.vessels && (
+                <Text style={styles.errorText}>{errors.vessels}</Text>
               )}
             </View>
           </View>
@@ -228,7 +270,7 @@ export default function AddEquipment() {
           {/* Optional Fields Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Additional Details</Text>
-            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Optional information</Text>
+            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Optional - can be left blank</Text>
 
             {/* Manufacturer */}
             <View style={styles.inputGroup}>
@@ -386,6 +428,7 @@ export default function AddEquipment() {
                 color={theme.dark ? '#FFFFFF' : '#111827'}
                 backgroundColor={theme.colors.surface}
               />
+              <Text style={[styles.qrCodeId, { color: theme.colors.text }]}>{formData.equipment_id}</Text>
               <Text style={[styles.qrCaption, { color: theme.colors.textSecondary }]}>Scan this QR code using the app</Text>
             </View>
             <TouchableOpacity style={[styles.downloadButton, { backgroundColor: theme.colors.primary }]} onPress={handleDownloadQR}>
@@ -410,24 +453,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
+    paddingTop: 32, // Further reduced
+    paddingBottom: 8,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.2,
   },
   headerRight: {
     width: 40,
@@ -602,7 +646,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20
   },
@@ -618,8 +661,15 @@ const styles = StyleSheet.create({
   qrContainer: {
     padding: 20, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#F3F4F6', alignItems: 'center', marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2
   },
+  qrCodeId: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 1,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
   qrCaption: {
-    marginTop: 16, fontSize: 13, color: '#6B7280'
+    marginTop: 8, fontSize: 13, color: '#6B7280'
   },
   downloadButton: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#2563EB', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, gap: 8, width: '100%', justifyContent: 'center'

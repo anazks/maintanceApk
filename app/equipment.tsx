@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react'; // Added useEffect
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState, useRef, useEffect } from 'react'; 
 import {
   ActivityIndicator,
   FlatList,
@@ -11,10 +11,15 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDB } from '../database';
 import { useTheme } from '../context/ThemeContext';
+import QRCode from 'react-native-qrcode-svg';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 
 interface Equipment {
@@ -42,10 +47,17 @@ export default function EquipmentList() {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load data on component mount
-  useEffect(() => {
-    loadEquipment();
-  }, []);
+  // QR Modal state
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrData, setQRData] = useState({ id: '', name: '' });
+  const qrRef = useRef<any>(null);
+
+  // Load data when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadEquipment();
+    }, [])
+  );
 
   // Filter equipment when search query, filter, or equipment changes
   useEffect(() => {
@@ -114,6 +126,24 @@ export default function EquipmentList() {
       case 'Maintenance': return '#FEF3C7';
       case 'Inactive': return '#F3F4F6';
       default: return '#FEE2E2';
+    }
+  };
+
+  const handleOpenQR = (item: Equipment) => {
+    setQRData({ id: item.equipment_id, name: item.name });
+    setShowQRModal(true);
+  };
+
+  const handleDownloadQR = async () => {
+    if (qrRef.current) {
+      qrRef.current.toDataURL(async (data: string) => {
+        const filename = `QR_${qrData.id}.png`;
+        const filePath = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.writeAsStringAsync(filePath, data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await Sharing.shareAsync(filePath);
+      });
     }
   };
 
@@ -242,7 +272,15 @@ export default function EquipmentList() {
                     </Text>
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <TouchableOpacity 
+                    onPress={() => handleOpenQR(item)}
+                    style={[styles.qrButton, { backgroundColor: theme.dark ? '#1e293b' : '#f8fafc' }]}
+                  >
+                    <Ionicons name="qr-code-outline" size={20} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                </View>
               </View>
 
               <Text style={[styles.equipmentName, { color: theme.colors.text }]}>{item.name}</Text>
@@ -296,6 +334,39 @@ export default function EquipmentList() {
           )}
         />
       </View>
+
+      {/* QR Code Modal */}
+      <Modal visible={showQRModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Equipment QR Code</Text>
+                <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>{qrData.name}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowQRModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.qrContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <QRCode
+                value={qrData.id}
+                size={220}
+                getRef={(c) => (qrRef.current = c)}
+                color={theme.dark ? '#FFFFFF' : '#111827'}
+                backgroundColor={theme.colors.surface}
+              />
+              <Text style={[styles.qrCodeId, { color: theme.colors.text }]}>{qrData.id}</Text>
+              <Text style={[styles.qrCaption, { color: theme.colors.textSecondary }]}>Scan to view equipment details</Text>
+            </View>
+            <TouchableOpacity style={[styles.downloadButton, { backgroundColor: theme.colors.primary }]} onPress={handleDownloadQR}>
+              <Ionicons name="download-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.downloadButtonText}>Save QR Code</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -327,9 +398,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8, // Drastically reduced
+    paddingBottom: 4,
     borderBottomWidth: 1,
   },
   backButton: {
@@ -340,13 +411,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandTitle: {
-    fontSize: 22,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -0.1,
   },
   headerSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 0,
   },
   addButtonSmall: {
     width: 40,
@@ -357,33 +428,33 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 4,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    height: 30,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
+    marginLeft: 6,
+    fontSize: 12,
     color: '#111827',
-    paddingVertical: 8,
+    paddingVertical: 2,
   },
   filterContainer: {
-    paddingBottom: 12,
+    paddingBottom: 4,
   },
   filterScroll: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 6,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     borderWidth: 1,
   },
   filterChipActive: {
@@ -398,9 +469,9 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginVertical: 16,
-    borderRadius: 16,
-    padding: 16,
+    marginVertical: 2,
+    borderRadius: 8,
+    padding: 6,
     borderWidth: 1,
   },
   statBox: {
@@ -408,12 +479,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 0,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '500',
   },
   statDivider: {
@@ -427,9 +498,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   card: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 10, // Reduced from 16
+    marginBottom: 8, // Reduced from 12
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -441,7 +512,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4, // Reduced from 8
   },
   idContainer: {
     flexDirection: 'row',
@@ -472,14 +543,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   equipmentName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 6, // Reduced from 12
   },
   detailsGrid: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 6, // Reduced from 12
   },
   detailItem: {
     flexDirection: 'row',
@@ -542,5 +613,79 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  qrButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  qrContainer: {
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 24,
+    width: '100%',
+  },
+  qrCodeId: {
+    marginTop: 20,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  qrCaption: {
+    marginTop: 8,
+    fontSize: 13,
+  },
+  downloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    gap: 10,
+    width: '100%',
+  },
+  downloadButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

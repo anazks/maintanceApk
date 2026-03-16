@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -56,6 +56,18 @@ export default function Settings() {
   const [showEquipModal, setShowEquipModal] = useState(false);
   const [newTask, setNewTask] = useState('');
   const [editTaskData, setEditTaskData] = useState<{id: number, text: string} | null>(null);
+  const [unitSystem, setUnitSystem] = useState<'Metric' | 'Imperial'>('Metric');
+  const [language, setLanguage] = useState('English');
+  const params = useLocalSearchParams();
+
+  useEffect(() => {
+    if (params.tab === 'Categories') {
+      setActiveTab('Categories');
+      if (params.addCat === 'true') {
+        setShowAddCatModal(true);
+      }
+    }
+  }, [params.tab, params.addCat]);
 
 
   useEffect(() => {
@@ -214,6 +226,14 @@ export default function Settings() {
               Preferences
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'Checklists' && styles.tabActive]} // Re-using style for simplicity
+            onPress={() => router.push('/vessels')}
+          >
+            <Text style={[styles.tabText, { color: '#2563EB' }]}>
+              Vessels
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -339,76 +359,89 @@ export default function Settings() {
           {/* Preferences Tab */}
           {activeTab === 'Preferences' && (
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>App Preferences</Text>
-              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>Customize your experience</Text>
+              <Text style={[styles.sectionTitle, { fontSize: 15, fontWeight: '700', color: theme.colors.text }]}>App Preferences</Text>
+              <Text style={[styles.sectionSubtitle, { fontSize: 11, marginTop: 0, color: theme.colors.textSecondary }]}>Customize your experience</Text>
 
-              {/* Theme Selector Card */}
-              <View style={[styles.themeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                <View style={styles.themeCardHeader}>
-                  <Ionicons name={isDarkMode ? 'moon' : 'sunny'} size={22} color={isDarkMode ? '#818CF8' : '#F59E0B'} />
-                  <Text style={[styles.themeCardTitle, { color: theme.colors.text }]}>
-                    {isDarkMode ? 'Dark Mode' : 'Light Mode'}
-                  </Text>
-                </View>
-                <Text style={[styles.themeCardSubtitle, { color: theme.colors.textSecondary }]}>
-                  Choose a display theme for the entire app
-                </Text>
-
-                {/* Theme Toggle Buttons */}
-                <View style={[styles.themeSelector, { backgroundColor: theme.colors.background }]}>
-                  <TouchableOpacity
-                    style={[
-                      styles.themeOption,
-                      !isDarkMode && [styles.themeOptionActive, { backgroundColor: theme.colors.surface, borderColor: theme.colors.primary, shadowColor: theme.colors.primary }]
-                    ]}
-                    onPress={() => !isDarkMode ? null : toggleTheme()}
-                  >
-                    <Ionicons name="sunny" size={24} color={!isDarkMode ? '#F59E0B' : theme.colors.textSecondary} />
-                    <Text style={[styles.themeOptionLabel, { color: !isDarkMode ? theme.colors.primary : theme.colors.textSecondary }]}>
-                      Light
-                    </Text>
-                    {!isDarkMode && (
-                      <View style={[styles.activeDot, { backgroundColor: theme.colors.primary }]} />
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.themeOption,
-                      isDarkMode && [styles.themeOptionActive, { backgroundColor: theme.colors.surface, borderColor: '#818CF8', shadowColor: '#818CF8' }]
-                    ]}
-                    onPress={() => isDarkMode ? null : toggleTheme()}
-                  >
-                    <Ionicons name="moon" size={24} color={isDarkMode ? '#818CF8' : theme.colors.textSecondary} />
-                    <Text style={[styles.themeOptionLabel, { color: isDarkMode ? '#818CF8' : theme.colors.textSecondary }]}>
-                      Dark
-                    </Text>
-                    {isDarkMode && (
-                      <View style={[styles.activeDot, { backgroundColor: '#818CF8' }]} />
-                    )}
-                  </TouchableOpacity>
-                </View>
-
-                {/* Quick Toggle Row */}
-                <View style={[styles.toggleRow, styles.quickToggleRow, { borderTopColor: theme.colors.border }]}>
-                  <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Quick Toggle</Text>
-                  <Switch
+              {/* Theme Selector - Compact Version */}
+              <View style={[styles.compactCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 12 }]}>
+                <View style={[styles.actionRow, { borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingBottom: 10, marginBottom: 10 }]}>
+                   <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Display Theme</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>{isDarkMode ? 'Dark' : 'Light'} mode active</Text>
+                   </View>
+                   <Switch
                     value={isDarkMode}
                     onValueChange={toggleTheme}
                     trackColor={{ false: '#D1D5DB', true: '#4F46E5' }}
                     thumbColor={isDarkMode ? '#C7D2FE' : '#F3F4F6'}
-                    ios_backgroundColor="#D1D5DB"
                   />
+                </View>
+
+                {/* Compact Theme Selection */}
+                <View style={[styles.themeSelectorCompact, { backgroundColor: theme.colors.background }]}>
+                  <TouchableOpacity
+                    style={[styles.themeOptionSmall, !isDarkMode && styles.themeOptionSmallActive]}
+                    onPress={() => !isDarkMode ? null : toggleTheme()}
+                  >
+                    <Ionicons name="sunny" size={16} color={!isDarkMode ? theme.colors.primary : theme.colors.textSecondary} />
+                    <Text style={[styles.themeOptionLabelSmall, { color: !isDarkMode ? theme.colors.primary : theme.colors.textSecondary }]}>Light</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.themeOptionSmall, isDarkMode && styles.themeOptionSmallActive]}
+                    onPress={() => isDarkMode ? null : toggleTheme()}
+                  >
+                    <Ionicons name="moon" size={16} color={isDarkMode ? '#818CF8' : theme.colors.textSecondary} />
+                    <Text style={[styles.themeOptionLabelSmall, { color: isDarkMode ? '#818CF8' : theme.colors.textSecondary }]}>Dark</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                <TouchableOpacity style={styles.actionRow}>
+              {/* Other Preferences */}
+              <View style={[styles.compactCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 12 }]}>
+                <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingVertical: 10 }]}>
+                  <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Unit System</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>{unitSystem}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingVertical: 10 }]}>
+                  <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Language</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>{language}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionRow, { paddingVertical: 10 }]}>
+                  <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Data Backup</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Export database to device</Text>
+                  </View>
+                  <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.compactCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 12 }]}>
+                <TouchableOpacity 
+                   style={[styles.actionRow, { borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingVertical: 10 }]}
+                   onPress={() => router.push('/sync')}
+                >
+                  <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Synchronize Data</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Search nearby via Wi-Fi/Bluetooth</Text>
+                  </View>
+                  <Ionicons name="swap-horizontal-outline" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionRow, { paddingVertical: 10 }]}>
                   <View style={styles.rowContent}>
                     <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Notifications</Text>
-                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Configure maintenance alerts</Text>
+                    <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>Manage maintenance alerts</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                  <Ionicons name="notifications-outline" size={18} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -557,25 +590,25 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: { 
-    paddingHorizontal: 20, 
-    paddingTop: 24,
-    paddingBottom: 16, 
+    paddingHorizontal: 16, 
+    paddingTop: 32,
+    paddingBottom: 8, 
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6'
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#111827', letterSpacing: -0.5 },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827', letterSpacing: -0.2 },
   tabContainer: { 
     flexDirection: 'row', 
     backgroundColor: '#FFFFFF', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12,
+    paddingHorizontal: 12, 
+    paddingVertical: 8,
     borderBottomWidth: 1, 
     borderBottomColor: '#E5E7EB' 
   },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 8, marginHorizontal: 4 },
-  tabActive: { backgroundColor: '#2563EB', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  tabText: { fontSize: 14, fontWeight: '700', color: '#6B7280' },
+  tab: { flex: 1, paddingVertical: 6, alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 6, marginHorizontal: 3 },
+  tabActive: { backgroundColor: '#2563EB', elevation: 2 },
+  tabText: { fontSize: 12, fontWeight: '700', color: '#6B7280' },
   tabTextActive: { color: '#FFFFFF' },
   scroll: { padding: 20, paddingBottom: 40 },
   section: { marginBottom: 24 },
@@ -627,8 +660,8 @@ const styles = StyleSheet.create({
   actionText: { fontSize: 14, fontWeight: '600', color: '#2563EB' },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowContent: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '500', color: '#111827', marginBottom: 4 },
-  rowSubtitle: { fontSize: 13, color: '#6B7280' },
+  rowTitle: { fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  rowSubtitle: { fontSize: 11, color: '#6B7280' },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   actionRowText: { fontSize: 15, fontWeight: '500', color: '#111827' },
   footer: { alignItems: 'center', marginTop: 20 },
@@ -709,5 +742,37 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: 16,
     marginTop: 4,
+  },
+  compactCard: {
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+  },
+  themeSelectorCompact: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 4,
+    gap: 6,
+  },
+  themeOptionSmall: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  themeOptionSmallActive: {
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  themeOptionLabelSmall: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

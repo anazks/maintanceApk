@@ -134,7 +134,7 @@ export default function Login() {
 
             {/* Footer */}
             <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
-              Naval Inventory System • v1.0
+              © 2026 SUJATHA Fleet Management • v1.0
             </Text>
           </View>
         </ScrollView>
