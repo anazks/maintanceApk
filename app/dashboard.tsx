@@ -22,8 +22,8 @@ const SYSTEM_HEALTH = [
 ];
 
 import { useFocusEffect } from 'expo-router';
-import { getDB } from '../database';
 import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
 
 export default function Dashboard() {
   const { theme, isDarkMode } = useTheme();
@@ -51,15 +51,15 @@ export default function Dashboard() {
   const loadMetrics = () => {
     try {
       const db = getDB();
-      
-      // Calculate real availability based on equipment status
-      const totalEq = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Equipment')?.count || 0;
-      const activeEq = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Equipment WHERE status="Active"')?.count || 0;
-      const maintenanceEq = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Equipment WHERE status="Under Maintenance" OR status="Maintenance"')?.count || 0;
+
+      // Calculate real availability based on equipment status (excluding Retired from the total fleet)
+      const totalEq = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM Equipment WHERE status != "Retired"')?.count || 0;
+      const activeEq = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM Equipment WHERE status="Active"')?.count || 0;
+      const maintenanceEq = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM Equipment WHERE status="Under Maintenance" OR status="Maintenance"')?.count || 0;
       const availabilityPct = totalEq > 0 ? (activeEq / totalEq) * 100 : 100;
 
       // Mocking some sections based on real counts to make it feel alive
-      const defectsCount = db.getFirstSync<{count: number}>('SELECT COUNT(*) as count FROM Defects WHERE status != "Closed"')?.count || 0;
+      const defectsCount = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM Defects WHERE status != "Closed"')?.count || 0;
       const maintCount = maintenanceEq;
 
       // Simple heuristic for system health
@@ -94,14 +94,14 @@ export default function Dashboard() {
           <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>SUJATHA Analytics</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>SUJATA Analytics</Text>
           <TouchableOpacity style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
             <Ionicons name="download-outline" size={20} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { backgroundColor: theme.colors.background }]}>
-          
+
           {/* Main KPI Card */}
           <View style={[styles.kpiCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={styles.kpiHeader}>
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   scrollContent: { padding: 16, paddingBottom: 40 },
-  
+
   kpiCard: {
     backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, marginBottom: 16,
     borderWidth: 1, borderColor: '#F3F4F6',

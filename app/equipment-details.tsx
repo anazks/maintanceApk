@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -14,11 +15,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDB } from '../database';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
 
 const { width } = Dimensions.get('window');
 
@@ -69,9 +70,19 @@ interface UsageRecord {
   used_date: string;
 }
 
+interface Troubleshooting {
+  id: number;
+  equipment_id: number | null;
+  category: string;
+  problem: string;
+  solution: string;
+}
+
 export default function EquipmentDetails() {
   const router = useRouter();
   const { theme, isDarkMode } = useTheme();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
   const { id } = useLocalSearchParams();
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([]);
@@ -80,7 +91,7 @@ export default function EquipmentDetails() {
   const [loading, setLoading] = useState(true);
   const [lastMaintenance, setLastMaintenance] = useState<string>('N/A');
   const [nextMaintenance, setNextMaintenance] = useState<string>('N/A');
-  const [associatedVessels, setAssociatedVessels] = useState<{id: number, name: string, type: string}[]>([]);
+  const [associatedVessels, setAssociatedVessels] = useState<{ id: number, name: string, type: string }[]>([]);
 
   // Spares Withdraw Modal
   const [showUsageModal, setShowUsageModal] = useState(false);
@@ -97,7 +108,8 @@ export default function EquipmentDetails() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [tempStatus, setTempStatus] = useState('');
-  
+  const [customStatus, setCustomStatus] = useState('');
+
   // Maintenance Details State
   const [maintDetails, setMaintDetails] = useState({
     maintainedBy: '',
@@ -115,6 +127,31 @@ export default function EquipmentDetails() {
   const [showDefectModal, setShowDefectModal] = useState(false);
   const [defectLoading, setDefectLoading] = useState(false);
   const [defectForm, setDefectForm] = useState({ title: '', description: '', priority: 'Medium', reportedBy: '' });
+
+  // Edit Equipment Modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    section: '',
+    location: '',
+    manufacturer: '',
+    model_number: '',
+    serial_number: '',
+    installation_date: '',
+    equipment_id: ''
+  });
+
+  // Troubleshooting State
+  const [troubleshooting, setTroubleshooting] = useState<Troubleshooting[]>([]);
+  const [showTroubleModal, setShowTroubleModal] = useState(false);
+  const [troubleLoading, setTroubleLoading] = useState(false);
+  const [troubleForm, setTroubleForm] = useState({
+    problem: '',
+    solution: '',
+    category: 'General',
+    isGeneral: true
+  });
+  const [editTroubleId, setEditTroubleId] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -184,12 +221,20 @@ export default function EquipmentDetails() {
         `, [item.id]);
         setUsageHistory(history);
 
-        const vessels = db.getAllSync<{id: number, name: string, type: string}>(`
+        const vessels = db.getAllSync<{ id: number, name: string, type: string }>(`
           SELECT v.* FROM Vessels v
           JOIN Equipment_Vessels ev ON v.id = ev.vessel_id
           WHERE ev.equipment_id = ?
         `, [item.id]);
         setAssociatedVessels(vessels);
+
+        // Load Troubleshooting Guides
+        const trouble = db.getAllSync<Troubleshooting>(`
+          SELECT * FROM Troubleshooting_Guides 
+          WHERE equipment_id = ? OR equipment_id IS NULL 
+          ORDER BY equipment_id DESC, created_at DESC
+        `, [item.id]);
+        setTroubleshooting(trouble);
 
       } else {
         Alert.alert('Error', 'Equipment not found.');
@@ -236,7 +281,7 @@ export default function EquipmentDetails() {
       case 'Maintenance': return '#F59E0B';
       case 'Inactive': return '#6B7280';
       case 'Retired': return '#EF4444';
-      default: return '#6B7280';
+      default: return '#2563EB'; // Blue for custom
     }
   };
 
@@ -247,7 +292,7 @@ export default function EquipmentDetails() {
       case 'Maintenance': return '#FFFBEB';
       case 'Inactive': return '#F3F4F6';
       case 'Retired': return '#FEF2F2';
-      default: return '#F3F4F6';
+      default: return '#EFF6FF'; // Light blue for custom
     }
   };
 
@@ -369,11 +414,11 @@ export default function EquipmentDetails() {
         if (maintDetails.scheduleAlert && maintDetails.expectedFinish) {
           const finishDate = new Date(maintDetails.expectedFinish);
           const now = new Date();
-          
+
           if (finishDate > now) {
             // Calculate seconds from now to the expected finish date
             const secondsInFuture = Math.floor((finishDate.getTime() - now.getTime()) / 1000);
-            
+
             await Notifications.scheduleNotificationAsync({
               content: {
                 title: 'âš¡ Maintenance Completion Due',
@@ -390,21 +435,166 @@ export default function EquipmentDetails() {
           }
         }
       } else {
+        const finalStatus = newStatus === 'Custom...' ? customStatus : newStatus;
+        if (newStatus === 'Custom...' && !customStatus.trim()) {
+          Alert.alert('Required', 'Please enter a custom status name.');
+          setStatusLoading(false);
+          return;
+        }
+
         db.runSync(
           'UPDATE Equipment SET status = ?, maintained_by = NULL, maintenance_start_date = NULL, expected_completion_date = NULL WHERE id = ?',
-          [newStatus, equipment.id]
+          [finalStatus, equipment.id]
         );
       }
 
       setShowStatusModal(false);
       loadDetails(equipment.id);
-      Alert.alert('Success', `Equipment status updated to ${newStatus}`);
+      Alert.alert('Success', `Equipment status updated successfully.`);
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to update status.');
     } finally {
       setStatusLoading(false);
     }
+  };
+
+  const handleEditOpen = () => {
+    if (!equipment) return;
+    setEditForm({
+      name: equipment.name,
+      section: equipment.section || '',
+      location: equipment.location || '',
+      manufacturer: equipment.manufacturer || '',
+      model_number: equipment.model_number || '',
+      serial_number: equipment.serial_number || '',
+      installation_date: equipment.installation_date || '',
+      equipment_id: equipment.equipment_id || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const submitEdit = () => {
+    if (!equipment) return;
+    if (!editForm.name.trim()) {
+      Alert.alert('Required', 'Equipment name is required.');
+      return;
+    }
+    const db = getDB();
+    try {
+      db.runSync(`
+        UPDATE Equipment 
+        SET equipment_id = ?, name = ?, section = ?, location = ?, manufacturer = ?, model_number = ?, serial_number = ?, installation_date = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `, [editForm.equipment_id.trim(), editForm.name.trim(), editForm.section.trim(), editForm.location.trim(), editForm.manufacturer.trim(), editForm.model_number.trim(), editForm.serial_number.trim(), editForm.installation_date.trim(), equipment.id]);
+
+      Alert.alert('Success', 'Equipment details updated.');
+      setShowEditModal(false);
+      loadDetails(equipment.id);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to update equipment.');
+    }
+  };
+
+  const submitTroubleshooting = () => {
+    if (!troubleForm.problem.trim() || !troubleForm.solution.trim()) {
+      Alert.alert('Required', 'Please fill in both the problem and the solution.');
+      return;
+    }
+    if (!equipment) return;
+
+    setTroubleLoading(true);
+    const db = getDB();
+    try {
+      if (editTroubleId) {
+        db.runSync(`
+          UPDATE Troubleshooting_Guides 
+          SET category = ?, problem = ?, solution = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `, [troubleForm.category, troubleForm.problem.trim(), troubleForm.solution.trim(), editTroubleId]);
+        Alert.alert('Success', 'Troubleshooting guide updated successfully.');
+      } else {
+        db.runSync(`
+          INSERT INTO Troubleshooting_Guides (equipment_id, category, problem, solution, created_at)
+          VALUES (?, ?, ?, ?, datetime('now'))
+        `, [troubleForm.isGeneral ? null : equipment.id, troubleForm.category, troubleForm.problem.trim(), troubleForm.solution.trim()]);
+        Alert.alert('Success', 'Troubleshooting guide added successfully.');
+      }
+
+      setShowTroubleModal(false);
+      setTroubleForm({ problem: '', solution: '', category: 'General', isGeneral: true });
+      setEditTroubleId(null);
+      loadDetails(equipment.id);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to save troubleshooting guide.');
+    } finally {
+      setTroubleLoading(false);
+    }
+  };
+
+  const handleDeleteTrouble = (troubleId: number) => {
+    Alert.alert(
+      'Delete Guide',
+      'Are you sure you want to delete this troubleshooting method?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const db = getDB();
+            try {
+              db.runSync('DELETE FROM Troubleshooting_Guides WHERE id = ?', [troubleId]);
+              if (equipment) loadDetails(equipment.id);
+            } catch (e) {
+              console.error(e);
+              Alert.alert('Error', 'Failed to delete troubleshooting guide.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDeleteEquipment = () => {
+    if (!equipment) return;
+    Alert.alert(
+      'Delete Equipment',
+      `Are you sure you want to delete ${equipment.name}? This action cannot be undone and will remove all associated maintenance records.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const db = getDB();
+            try {
+              db.withTransactionSync(() => {
+                // Delete related records
+                db.runSync('DELETE FROM Maintenance_Log_Items WHERE log_id IN (SELECT id FROM Maintenance_Log WHERE equipment_id = ?)', [equipment.id]);
+                db.runSync('DELETE FROM Maintenance_Log WHERE equipment_id = ?', [equipment.id]);
+                db.runSync('DELETE FROM Checklist_Items WHERE schedule_id IN (SELECT id FROM Maintenance_Schedule WHERE equipment_id = ?)', [equipment.id]);
+                db.runSync('DELETE FROM Maintenance_Schedule WHERE equipment_id = ?', [equipment.id]);
+                db.runSync('DELETE FROM Defects WHERE equipment_id = ?', [equipment.id]);
+                db.runSync('DELETE FROM Equipment_Spares WHERE equipment_id = ?', [equipment.id]);
+                db.runSync('DELETE FROM Equipment_Vessels WHERE equipment_id = ?', [equipment.id]);
+                db.runSync('DELETE FROM Spare_Usage WHERE equipment_id = ?', [equipment.id]);
+
+                // Finally delete the equipment
+                db.runSync('DELETE FROM Equipment WHERE id = ?', [equipment.id]);
+              });
+              Alert.alert('Deleted', 'Equipment has been removed.');
+              router.back();
+            } catch (e) {
+              console.error(e);
+              Alert.alert('Error', 'Failed to delete equipment.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Helper for Calendar
@@ -419,7 +609,7 @@ export default function EquipmentDetails() {
   const handleDateSelect = (day: number) => {
     const selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
     const dateStr = selectedDate.toISOString().split('T')[0];
-    
+
     if (calendarTarget === 'start') {
       setMaintDetails(prev => ({ ...prev, startDate: dateStr }));
     } else {
@@ -452,7 +642,7 @@ export default function EquipmentDetails() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA</Text>
+          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATA</Text>
           <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Asset Details</Text>
         </View>
         <View style={styles.headerRight} />
@@ -491,7 +681,7 @@ export default function EquipmentDetails() {
                 <Text style={[styles.value, { color: theme.colors.text }]}>{equipment.location || 'Not specified'}</Text>
               </View>
             </View>
-            
+
             <View style={styles.infoRow}>
               <View style={styles.infoCol}>
                 <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Manufacturer</Text>
@@ -608,7 +798,7 @@ export default function EquipmentDetails() {
                   <View style={styles.scheduleInfo}>
                     <View style={styles.scheduleTypeContainer}>
                       <View style={[
-                        styles.scheduleDot, 
+                        styles.scheduleDot,
                         isOverdue ? { backgroundColor: theme.colors.error } : (isFuture ? { backgroundColor: theme.colors.success } : { backgroundColor: theme.colors.warning })
                       ]} />
                       <Text style={[styles.scheduleType, { color: theme.colors.text }]}>{sched.schedule_type} Routine</Text>
@@ -623,32 +813,103 @@ export default function EquipmentDetails() {
                       </View>
                     )}
                   </View>
-                  {(!sched.task_count || sched.task_count === 0) ? null : (
-                  <TouchableOpacity
-                    style={[styles.executeButton, isFuture && styles.executeButtonCompleted]}
-                    onPress={() => router.push({
-                      pathname: '/routine-execute',
-                      params: {
-                        id: sched.id.toString(),
-                        equipment_name: equipment.name,
-                        equipment_id: equipment.equipment_id,
-                        schedule_type: sched.schedule_type
-                      }
-                    })}
-                  >
-                    <Text style={[styles.executeButtonText, isFuture && styles.executeButtonTextCompleted]}>
-                      {isFuture ? 'Completed' : 'Execute'}
-                    </Text>
-                    <Ionicons
-                      name={isFuture ? "checkmark-outline" : "arrow-forward"}
-                      size={16}
-                      color={isFuture ? theme.colors.success : "#FFFFFF"}
-                    />
-                  </TouchableOpacity>
-                  )}
+                  {(() => {
+                    const isDefault = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'].includes(sched.schedule_type);
+                    const hasTasks = (sched.task_count && sched.task_count > 0);
+                    // Always show for custom routines, or if it has tasks
+                    if (!isDefault || hasTasks) {
+                      return (
+                        <TouchableOpacity
+                          style={[styles.executeButton, isFuture && styles.executeButtonCompleted]}
+                          onPress={() => router.push({
+                            pathname: '/routine-execute',
+                            params: {
+                              id: sched.id.toString(),
+                              equipment_name: equipment.name,
+                              equipment_id: equipment.equipment_id,
+                              schedule_type: sched.schedule_type
+                            }
+                          })}
+                        >
+                          <Text style={[styles.executeButtonText, isFuture && styles.executeButtonTextCompleted]}>
+                            {isFuture ? 'Completed' : 'Execute'}
+                          </Text>
+                          <Ionicons
+                            name={isFuture ? "checkmark-outline" : "arrow-forward"}
+                            size={16}
+                            color={isFuture ? theme.colors.success : "#FFFFFF"}
+                          />
+                        </TouchableOpacity>
+                      );
+                    }
+                    return null;
+                  })()}
                 </View>
               );
             })
+          )}
+        </View>
+
+        {/* Troubleshooting Guides */}
+        <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderTitleRow}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Troubleshooting Guides</Text>
+              <View style={[styles.sectionBadge, { backgroundColor: theme.colors.background }]}>
+                <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{troubleshooting.length}</Text>
+              </View>
+            </View>
+            {isAdmin && (
+              <TouchableOpacity
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
+              onPress={() => {
+                setEditTroubleId(null);
+                setTroubleForm({ problem: '', solution: '', category: 'General', isGeneral: true });
+                setShowTroubleModal(true);
+              }}
+              >
+                <Ionicons name="add" size={16} color={theme.colors.primary} />
+                <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Add Method</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {troubleshooting.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="help-buoy-outline" size={32} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No troubleshooting methods available.</Text>
+            </View>
+          ) : (
+            troubleshooting.map(guide => (
+              <View key={guide.id} style={[styles.troubleItem, { borderBottomColor: theme.colors.border }]}>
+                <View style={[styles.troubleHeader, { justifyContent: 'space-between', flexDirection: 'row', alignItems: 'center' }]}>
+                  <View style={[styles.troubleCategoryBadge, { backgroundColor: theme.colors.background }]}>
+                    <Text style={[styles.troubleCategoryText, { color: theme.colors.primary }]}>
+                      {guide.equipment_id ? 'EQUIPMENT' : 'GENERAL'} • {guide.category}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity onPress={() => {
+                        setEditTroubleId(guide.id);
+                        setTroubleForm({
+                          problem: guide.problem,
+                          solution: guide.solution,
+                          category: guide.category || 'General',
+                          isGeneral: !guide.equipment_id
+                        });
+                        setShowTroubleModal(true);
+                      }}>
+                      <Ionicons name="pencil-outline" size={18} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeleteTrouble(guide.id)}>
+                      <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={[styles.troubleProblem, { color: theme.colors.text }]}>{guide.problem}</Text>
+                <Text style={[styles.troubleSolution, { color: theme.colors.textSecondary }]}>{guide.solution}</Text>
+              </View>
+            ))
           )}
         </View>
 
@@ -685,6 +946,24 @@ export default function EquipmentDetails() {
             >
               <Ionicons name="options-outline" size={18} color={theme.colors.primary} />
               <Text style={[styles.statusButtonText, { color: theme.colors.primary }]}>Update Status</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.actionButtons, { marginTop: -8 }]}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton, { backgroundColor: theme.dark ? '#1e293b' : '#f8fafc', borderColor: theme.colors.border }]}
+              onPress={handleEditOpen}
+            >
+              <Ionicons name="create-outline" size={18} color={theme.colors.primary} />
+              <Text style={[styles.editButtonText, { color: theme.colors.primary }]}>Edit Details</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton, { backgroundColor: theme.dark ? '#450a0a' : '#FEF2F2', borderColor: '#FECACA' }]}
+              onPress={handleDeleteEquipment}
+            >
+              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              <Text style={[styles.deleteButtonText, { color: "#EF4444" }]}>Delete Asset</Text>
             </TouchableOpacity>
           </View>
 
@@ -777,116 +1056,128 @@ export default function EquipmentDetails() {
       {/* Usage Modal */}
       <Modal visible={showUsageModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Record Usage</Text>
-              <TouchableOpacity onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); }}>
-                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Record Usage</Text>
+                <TouchableOpacity onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); }}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
 
-            {selectedSpare && (
-              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
-                Consuming <Text style={[styles.modalHighlight, { color: theme.colors.primary }]}>{selectedSpare.name}</Text> for {equipment?.name}
-              </Text>
-            )}
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                {selectedSpare && (
+                  <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
+                    Consuming <Text style={[styles.modalHighlight, { color: theme.colors.primary }]}>{selectedSpare.name}</Text> for {equipment?.name}
+                  </Text>
+                )}
 
-            <View style={styles.modalField}>
-              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Quantity (Max: {selectedSpare?.available_quantity})</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-                value={useQuantity}
-                onChangeText={setUseQuantity}
-                keyboardType="number-pad"
-                placeholder="Enter quantity"
-                placeholderTextColor={theme.colors.textSecondary}
-              />
-            </View>
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Quantity (Max: {selectedSpare?.available_quantity})</Text>
+                  <TextInput
+                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    value={useQuantity}
+                    onChangeText={setUseQuantity}
+                    keyboardType="number-pad"
+                    placeholder="Enter quantity"
+                    placeholderTextColor={theme.colors.textSecondary}
+                  />
+                </View>
 
-            <View style={styles.modalField}>
-              <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Maintainer Name</Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-                placeholder="Enter your name"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={useMaintainer}
-                onChangeText={setUseMaintainer}
-              />
-            </View>
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Maintainer Name</Text>
+                  <TextInput
+                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    placeholder="Enter your name"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={useMaintainer}
+                    onChangeText={setUseMaintainer}
+                  />
+                </View>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtnCancel, { backgroundColor: theme.colors.background }]}
-                onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); }}
-              >
-                <Text style={[styles.modalBtnCancelText, { color: theme.colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleUseSpare}>
-                <Text style={styles.modalBtnSubmitText}>Withdraw Stock</Text>
-              </TouchableOpacity>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalBtnCancel, { backgroundColor: theme.colors.background }]}
+                    onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); }}
+                  >
+                    <Text style={[styles.modalBtnCancelText, { color: theme.colors.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleUseSpare}>
+                    <Text style={styles.modalBtnSubmitText}>Withdraw Stock</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
       {/* Assign Spare Modal */}
       <Modal visible={showAssignModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.assignModalContent, { backgroundColor: theme.colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Assign Spare Part</Text>
-              <TouchableOpacity onPress={() => setShowAssignModal(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.modalContent, styles.assignModalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Assign Spare Part</Text>
+                <TouchableOpacity onPress={() => setShowAssignModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
 
-            <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Select a spare part to link with this equipment</Text>
+              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Select a spare part to link with this equipment</Text>
 
-            <ScrollView style={styles.assignList} showsVerticalScrollIndicator={false}>
-              {availableSpares.length === 0 ? (
-                <View style={styles.emptyAssign}>
-                  <Ionicons name="cube-outline" size={40} color="#E5E7EB" />
-                  <Text style={styles.emptyAssignText}>No available spares to assign</Text>
-                </View>
-              ) : (
-                availableSpares.map(spare => (
-                  <View key={spare.id} style={[styles.spareAssignRow, { borderBottomColor: theme.colors.border }]}>
-                    <View style={{flex: 1}}>
-                      <Text style={[styles.assignSpareName, { color: theme.colors.text }]}>{spare.name}</Text>
-                      <Text style={[styles.assignSpareDetail, { color: theme.colors.textSecondary }]}>{spare.part_number} â€¢ {spare.available_quantity} in stock</Text>
-                      <TextInput 
-                        style={{
-                          backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, 
-                          borderRadius: 8, padding: 8, fontSize: 13, marginTop: 8, color: theme.colors.text
-                        }}
-                        placeholder="Maintainer Name (Linked By)"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        value={linkMaintainerName}
-                        onChangeText={setLinkMaintainerName}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.addSpareBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
-                      onPress={() => handleAssignSpare(spare.id)}
-                    >
-                      <Text style={[styles.addSpareBtnText, { color: theme.colors.primary }]}>Link & Use 1</Text>
-                    </TouchableOpacity>
+              <ScrollView key="assign-list-scroll" style={styles.assignList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {availableSpares.length === 0 ? (
+                  <View style={styles.emptyAssign}>
+                    <Ionicons name="cube-outline" size={40} color="#E5E7EB" />
+                    <Text style={styles.emptyAssignText}>No available spares to assign</Text>
                   </View>
-                ))
-              )}
-            </ScrollView>
-          </View>
+                ) : (
+                  availableSpares.map(spare => (
+                    <View key={spare.id} style={[styles.spareAssignRow, { borderBottomColor: theme.colors.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.assignSpareName, { color: theme.colors.text }]}>{spare.name}</Text>
+                        <Text style={[styles.assignSpareDetail, { color: theme.colors.textSecondary }]}>{spare.part_number} â€¢ {spare.available_quantity} in stock</Text>
+                        <TextInput
+                          style={{
+                            backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border,
+                            borderRadius: 8, padding: 8, fontSize: 13, marginTop: 8, color: theme.colors.text
+                          }}
+                          placeholder="Maintainer Name (Linked By)"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          value={linkMaintainerName}
+                          onChangeText={setLinkMaintainerName}
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.addSpareBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
+                        onPress={() => handleAssignSpare(spare.id)}
+                      >
+                        <Text style={[styles.addSpareBtnText, { color: theme.colors.primary }]}>Link & Use 1</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
       {/* Defect Reporting Modal */}
       <Modal visible={showDefectModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ width: '100%', alignItems: 'center' }}
           >
-            <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface }]}>
+            <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Report Defect</Text>
                 <TouchableOpacity onPress={() => setShowDefectModal(false)}>
@@ -895,7 +1186,7 @@ export default function EquipmentDetails() {
               </View>
               <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Identifying an issue for {equipment?.name || 'this asset'}</Text>
 
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Issue Title</Text>
                 <TextInput
                   style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
@@ -953,105 +1244,127 @@ export default function EquipmentDetails() {
       {/* Status Update Modal */}
       <Modal visible={showStatusModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Update Status</Text>
-              <TouchableOpacity onPress={() => setShowStatusModal(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Change operational status for {equipment?.name}</Text>
-
-            <View style={styles.statusOptions}>
-              {['Active', 'Under Maintenance', 'Inactive'].map((status) => (
-                <TouchableOpacity
-                  key={status}
-                  style={[
-                    styles.statusOption,
-                    tempStatus === status && styles.statusOptionActive
-                  ]}
-                  onPress={() => setTempStatus(status)}
-                >
-                  <View style={styles.statusOptionLeft}>
-                    <View style={[styles.statusOptionDot, { backgroundColor: getStatusColor(status) }]} />
-                    <Text style={[
-                      styles.statusOptionText,
-                      { color: theme.colors.text },
-                      tempStatus === status && [styles.statusOptionTextActive, { color: theme.colors.primary }]
-                    ]}>
-                      {status}
-                    </Text>
-                  </View>
-                  {tempStatus === status && (
-                    <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
-                  )}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Update Status</Text>
+                <TouchableOpacity onPress={() => setShowStatusModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
-              ))}
-            </View>
+              </View>
+              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Change operational status for {equipment?.name}</Text>
 
-            {(tempStatus === 'Under Maintenance' || tempStatus === 'Maintenance') && (
-              <ScrollView style={{ maxHeight: 250, marginTop: 10 }}>
-                <View style={styles.modalField}>
-                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Maintained To (Person/Team) *</Text>
-                  <TextInput
-                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-                    placeholder="e.g., Engine Team / John Doe"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={maintDetails.maintainedBy}
-                    onChangeText={t => setMaintDetails(prev => ({ ...prev, maintainedBy: t }))}
-                  />
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
+                <View style={styles.statusOptions}>
+                  {['Active', 'Under Maintenance', 'Inactive', 'Retired', 'Custom...'].map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusOption,
+                        tempStatus === status && styles.statusOptionActive
+                      ]}
+                      onPress={() => setTempStatus(status)}
+                    >
+                      <View style={styles.statusOptionLeft}>
+                        <View style={[styles.statusOptionDot, { backgroundColor: getStatusColor(status) }]} />
+                        <Text style={[
+                          styles.statusOptionText,
+                          { color: theme.colors.text },
+                          tempStatus === status && [styles.statusOptionTextActive, { color: theme.colors.primary }]
+                        ]}>
+                          {status}
+                        </Text>
+                      </View>
+                      {tempStatus === status && (
+                        <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
                 </View>
 
-                <View style={styles.modalField}>
-                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Start Date</Text>
-                  <TouchableOpacity 
-                    style={[styles.datePickerTrigger, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                    onPress={() => { setCalendarTarget('start'); setShowCalendar(true); }}
-                  >
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
-                    <Text style={[styles.datePickerText, { color: maintDetails.startDate ? theme.colors.text : theme.colors.textSecondary }]}>
-                      {maintDetails.startDate || "Select Start Date"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                {tempStatus === 'Custom...' && (
+                  <View style={{ marginTop: 20 }}>
+                    <View style={styles.modalField}>
+                      <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Custom Status Name *</Text>
+                      <TextInput
+                        style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                        placeholder="e.g., Awaiting Parts"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={customStatus}
+                        onChangeText={setCustomStatus}
+                      />
+                    </View>
+                  </View>
+                )}
 
-                <View style={styles.modalField}>
-                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Expected Completion Date</Text>
-                  <TouchableOpacity 
-                    style={[styles.datePickerTrigger, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                    onPress={() => { setCalendarTarget('finish'); setShowCalendar(true); }}
-                  >
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
-                    <Text style={[styles.datePickerText, { color: maintDetails.expectedFinish ? theme.colors.text : theme.colors.textSecondary }]}>
-                      {maintDetails.expectedFinish || "Select Expected Date"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                {(tempStatus === 'Under Maintenance' || tempStatus === 'Maintenance') && (
+                  <View style={{ marginTop: 10 }}>
+                    <View style={styles.modalField}>
+                      <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Maintained To (Person/Team) *</Text>
+                      <TextInput
+                        style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                        placeholder="e.g., Engine Team / John Doe"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={maintDetails.maintainedBy}
+                        onChangeText={t => setMaintDetails(prev => ({ ...prev, maintainedBy: t }))}
+                      />
+                    </View>
 
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}
-                  onPress={() => setMaintDetails(prev => ({ ...prev, scheduleAlert: !prev.scheduleAlert }))}
+                    <View style={styles.modalField}>
+                      <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Start Date</Text>
+                      <TouchableOpacity
+                        style={[styles.datePickerTrigger, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                        onPress={() => { setCalendarTarget('start'); setShowCalendar(true); }}
+                      >
+                        <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
+                        <Text style={[styles.datePickerText, { color: maintDetails.startDate ? theme.colors.text : theme.colors.textSecondary }]}>
+                          {maintDetails.startDate || "Select Start Date"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.modalField}>
+                      <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Expected Completion Date</Text>
+                      <TouchableOpacity
+                        style={[styles.datePickerTrigger, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                        onPress={() => { setCalendarTarget('finish'); setShowCalendar(true); }}
+                      >
+                        <Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />
+                        <Text style={[styles.datePickerText, { color: maintDetails.expectedFinish ? theme.colors.text : theme.colors.textSecondary }]}>
+                          {maintDetails.expectedFinish || "Select Expected Date"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}
+                      onPress={() => setMaintDetails(prev => ({ ...prev, scheduleAlert: !prev.scheduleAlert }))}
+                    >
+                      <Ionicons
+                        name={maintDetails.scheduleAlert ? "checkbox" : "square-outline"}
+                        size={24}
+                        color={maintDetails.scheduleAlert ? theme.colors.primary : theme.colors.textSecondary}
+                      />
+                      <Text style={{ marginLeft: 8, color: theme.colors.text, fontSize: 14 }}>Schedule alert on completion date</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.modalBtnSubmit, styles.statusSubmitBtn, statusLoading && styles.buttonDisabled]}
+                  onPress={() => handleUpdateStatus(tempStatus)}
+                  disabled={statusLoading}
                 >
-                  <Ionicons 
-                    name={maintDetails.scheduleAlert ? "checkbox" : "square-outline"} 
-                    size={24} 
-                    color={maintDetails.scheduleAlert ? theme.colors.primary : theme.colors.textSecondary} 
-                  />
-                  <Text style={{ marginLeft: 8, color: theme.colors.text, fontSize: 14 }}>Schedule alert on completion date</Text>
+                  <Text style={styles.modalBtnSubmitText}>
+                    {statusLoading ? 'Updating...' : 'Confirm Status Change'}
+                  </Text>
                 </TouchableOpacity>
               </ScrollView>
-            )}
-
-            <TouchableOpacity
-              style={[styles.modalBtnSubmit, styles.statusSubmitBtn, statusLoading && styles.buttonDisabled]}
-              onPress={() => handleUpdateStatus(tempStatus)}
-              disabled={statusLoading}
-            >
-              <Text style={styles.modalBtnSubmitText}>
-                {statusLoading ? 'Updating...' : 'Confirm Status Change'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
       <Modal
@@ -1060,12 +1373,12 @@ export default function EquipmentDetails() {
         animationType="fade"
         onRequestClose={() => setShowCalendar(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
           onPress={() => setShowCalendar(false)}
         >
-          <View 
+          <View
             style={[styles.calendarContent, { backgroundColor: theme.colors.surface }]}
             onStartShouldSetResponder={() => true}
           >
@@ -1094,11 +1407,11 @@ export default function EquipmentDetails() {
               {Array.from({ length: getDaysInMonth(currentCalendarDate.getMonth(), currentCalendarDate.getFullYear()) }).map((_, i) => {
                 const day = i + 1;
                 const isSelected = (calendarTarget === 'start' && maintDetails.startDate === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]) ||
-                                  (calendarTarget === 'finish' && maintDetails.expectedFinish === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]);
-                
+                  (calendarTarget === 'finish' && maintDetails.expectedFinish === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]);
+
                 return (
-                  <TouchableOpacity 
-                    key={day} 
+                  <TouchableOpacity
+                    key={day}
                     style={[styles.calendarDayCell, isSelected && { backgroundColor: theme.colors.primary, borderRadius: 20 }]}
                     onPress={() => handleDateSelect(day)}
                   >
@@ -1108,7 +1421,7 @@ export default function EquipmentDetails() {
               })}
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.calendarCloseBtn, { backgroundColor: theme.colors.background }]}
               onPress={() => setShowCalendar(false)}
             >
@@ -1117,6 +1430,203 @@ export default function EquipmentDetails() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Edit Equipment Modal */}
+      <Modal visible={showEditModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.editModalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Edit Equipment Details</Text>
+                <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Updating information for {equipment?.equipment_id}</Text>
+
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Equipment ID (Unique) *</Text>
+                  <TextInput
+                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    value={editForm.equipment_id}
+                    onChangeText={t => setEditForm(f => ({ ...f, equipment_id: t }))}
+                    placeholder="e.g. EQP-001"
+                    placeholderTextColor={theme.colors.textSecondary}
+                  />
+                </View>
+
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Equipment Name *</Text>
+                  <TextInput
+                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    value={editForm.name}
+                    onChangeText={t => setEditForm(f => ({ ...f, name: t }))}
+                  />
+                </View>
+
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Section / System</Text>
+                  <TextInput
+                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    value={editForm.section}
+                    placeholder="e.g. Propulsion"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    onChangeText={t => setEditForm(f => ({ ...f, section: t }))}
+                  />
+                </View>
+
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Location</Text>
+                  <TextInput
+                    style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    value={editForm.location}
+                    placeholder="e.g. Engine Room"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    onChangeText={t => setEditForm(f => ({ ...f, location: t }))}
+                  />
+                </View>
+
+                <View style={[styles.infoRow, { gap: 12 }]}>
+                  <View style={[styles.modalField, { flex: 1 }]}>
+                    <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Manufacturer</Text>
+                    <TextInput
+                      style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                      value={editForm.manufacturer}
+                      onChangeText={t => setEditForm(f => ({ ...f, manufacturer: t }))}
+                    />
+                  </View>
+                  <View style={[styles.modalField, { flex: 1 }]}>
+                    <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Model</Text>
+                    <TextInput
+                      style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                      value={editForm.model_number}
+                      onChangeText={t => setEditForm(f => ({ ...f, model_number: t }))}
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.infoRow, { gap: 12 }]}>
+                  <View style={[styles.modalField, { flex: 1 }]}>
+                    <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Serial Number</Text>
+                    <TextInput
+                      style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                      value={editForm.serial_number}
+                      onChangeText={t => setEditForm(f => ({ ...f, serial_number: t }))}
+                    />
+                  </View>
+                  <View style={[styles.modalField, { flex: 1 }]}>
+                    <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Installation Date</Text>
+                    <TextInput
+                      style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                      value={editForm.installation_date}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      onChangeText={t => setEditForm(f => ({ ...f, installation_date: t }))}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalBtnCancel, { backgroundColor: theme.colors.background }]}
+                    onPress={() => setShowEditModal(false)}
+                  >
+                    <Text style={[styles.modalBtnCancelText, { color: theme.colors.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalBtnSubmit} onPress={submitEdit}>
+                    <Text style={styles.modalBtnSubmitText}>Save Changes</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Troubleshooting Modal */}
+      <Modal visible={showTroubleModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.defectModalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                  {editTroubleId ? 'Edit Troubleshooting Method' : 'Add Troubleshooting Method'}
+                </Text>
+                <TouchableOpacity onPress={() => setShowTroubleModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>Add a guide for {equipment?.name}</Text>
+
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.modalField}>
+                  <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Category</Text>
+                  <View style={styles.priorityContainer}>
+                    {['General', 'Electrical', 'Mechanical', 'Operational'].map(c => (
+                      <TouchableOpacity
+                        key={c}
+                        style={[styles.priorityChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }, troubleForm.category === c && [styles.priorityChipActive, { backgroundColor: theme.colors.primary, borderColor: 'transparent' }]]}
+                        onPress={() => setTroubleForm(f => ({ ...f, category: c }))}
+                      >
+                        <Text style={[styles.priorityChipText, { color: theme.colors.textSecondary }, troubleForm.category === c && [styles.priorityChipTextActive, { color: '#FFFFFF' }]]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginLeft: 4 }}
+                  onPress={() => setTroubleForm(prev => ({ ...prev, isGeneral: !prev.isGeneral }))}
+                >
+                  <Ionicons
+                    name={troubleForm.isGeneral ? "checkbox" : "square-outline"}
+                    size={22}
+                    color={troubleForm.isGeneral ? theme.colors.primary : theme.colors.textSecondary}
+                  />
+                  <Text style={{ marginLeft: 8, color: theme.colors.text, fontSize: 14 }}>Mark as General Method (all assets)</Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.modalLabel, { color: theme.colors.textSecondary }]}>Problem / Symptom *</Text>
+                <TextInput
+                  style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="e.g. Motor overheating"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={troubleForm.problem}
+                  onChangeText={t => setTroubleForm(f => ({ ...f, problem: t }))}
+                />
+
+                <Text style={[styles.modalLabel, { color: theme.colors.textSecondary, marginTop: 12 }]}>Solution / Steps *</Text>
+                <TextInput
+                  style={[styles.modalInput, { height: 100, textAlignVertical: 'top', backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="Describe the solution steps..."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  multiline
+                  value={troubleForm.solution}
+                  onChangeText={t => setTroubleForm(f => ({ ...f, solution: t }))}
+                />
+
+                <TouchableOpacity
+                  style={[styles.modalBtnSubmit, { backgroundColor: theme.colors.primary, marginTop: 24, paddingVertical: 16 }]}
+                  onPress={submitTroubleshooting}
+                  disabled={troubleLoading}
+                >
+                  <Text style={styles.modalBtnSubmitText}>
+                    {troubleLoading ? 'Saving...' : editTroubleId ? 'Update Troubleshooting Method' : 'Save Troubleshooting Method'}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -1543,6 +2053,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2563EB'
   },
+  editButton: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0'
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB'
+  },
+  deleteButton: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA'
+  },
+  deleteButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444'
+  },
+  editModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    width: '90%',
+    maxHeight: '90%'
+  },
   spareItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1652,6 +2187,12 @@ const styles = StyleSheet.create({
     padding: 20
   },
   modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    maxHeight: '95%'
+  },
+  editModalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 24,
@@ -1888,5 +2429,32 @@ const styles = StyleSheet.create({
   },
   statusSubmitBtn: {
     marginTop: 20
+  },
+  troubleItem: {
+    paddingVertical: 16,
+    borderBottomWidth: 1
+  },
+  troubleHeader: {
+    marginBottom: 8
+  },
+  troubleCategoryBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8
+  },
+  troubleCategoryText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  troubleProblem: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6
+  },
+  troubleSolution: {
+    fontSize: 14,
+    lineHeight: 20
   }
 });

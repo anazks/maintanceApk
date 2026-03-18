@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Modal,
   SafeAreaView,
@@ -12,10 +13,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Alert,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { getDB } from '../database';
 import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
 
 interface SparePart {
   id: number;
@@ -36,7 +38,7 @@ export default function SpareParts() {
   const { theme, isDarkMode } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [parts, setParts] = useState<SparePart[]>([]);
-  
+
   // Usage Modal State
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [selectedPart, setSelectedPart] = useState<SparePart | null>(null);
@@ -58,8 +60,8 @@ export default function SpareParts() {
   const [newEquipmentId, setNewEquipmentId] = useState<number | null>(null);
 
   // Category & Equipment State
-  const [categories, setCategories] = useState<{id: number, name: string}[]>([]);
-  const [equipments, setEquipments] = useState<{id: number, name: string}[]>([]);
+  const [categories, setCategories] = useState<{ id: number, name: string }[]>([]);
+  const [equipments, setEquipments] = useState<{ id: number, name: string }[]>([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
 
@@ -72,7 +74,7 @@ export default function SpareParts() {
   const loadEquipments = () => {
     const db = getDB();
     try {
-      const dbEqs = db.getAllSync<{id: number, name: string}>('SELECT id, name FROM Equipment ORDER BY name');
+      const dbEqs = db.getAllSync<{ id: number, name: string }>('SELECT id, name FROM Equipment ORDER BY name');
       setEquipments(dbEqs);
     } catch (e) { console.error(e); }
   };
@@ -80,7 +82,7 @@ export default function SpareParts() {
   const loadCategories = () => {
     const db = getDB();
     try {
-      const dbCats = db.getAllSync<{id: number, name: string}>('SELECT * FROM Spare_Categories ORDER BY name');
+      const dbCats = db.getAllSync<{ id: number, name: string }>('SELECT * FROM Spare_Categories ORDER BY name');
       setCategories(dbCats);
     } catch (e) { console.error(e); }
   };
@@ -114,8 +116,8 @@ export default function SpareParts() {
     return 'In Stock';
   };
 
-  const filteredParts = parts.filter(part => 
-    part.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredParts = parts.filter(part =>
+    part.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     part.part_number.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -142,7 +144,7 @@ export default function SpareParts() {
   const handleUpdateStock = () => {
     if (!selectedPart) return;
     const qty = parseInt(useQuantity, 10);
-    
+
     if (isNaN(qty) || qty <= 0) {
       Alert.alert('Invalid', 'Please enter a valid quantity');
       return;
@@ -217,7 +219,7 @@ export default function SpareParts() {
           'INSERT INTO Equipment_Spares (equipment_id, spare_id, linked_by) VALUES (?, ?, ?)',
           [newEquipmentId, spareId, newKeeperName || 'Admin']
         );
-        
+
         // If initial quantity was provided, maybe record it as setup use? 
         // Or just link it. Usually "Add Part" is inventory.
         // But if they select equipment, it implies it's for that equipment.
@@ -250,8 +252,8 @@ export default function SpareParts() {
           <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, borderWidth: 1 }]}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <View style={{flex: 1, marginLeft: 16}}>
-            <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA Spares</Text>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATA Spares</Text>
             <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Inventory & Stock Control</Text>
           </View>
           <TouchableOpacity style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]} onPress={() => setShowAddModal(true)}>
@@ -302,14 +304,14 @@ export default function SpareParts() {
           renderItem={({ item }) => {
             const status = getStockStatus(item.stock_quantity);
             const isLowStock = item.stock_quantity <= item.minimum_quantity;
-            
+
             return (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.card, 
+                  styles.card,
                   { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                   isLowStock && { backgroundColor: theme.dark ? '#450a0a' : '#FEF2F2', borderColor: theme.dark ? '#7f1d1d' : '#FCA5A5' }
-                ]} 
+                ]}
                 activeOpacity={0.7}
                 onPress={() => {
                   setSelectedPart(item);
@@ -355,154 +357,166 @@ export default function SpareParts() {
       {/* Usage Modal */}
       <Modal visible={showUsageModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Stock Adjustment</Text>
-              <TouchableOpacity onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); setAdjustmentMode('withdraw'); }}>
-                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Stock Adjustment</Text>
+                <TouchableOpacity onPress={() => { setShowUsageModal(false); setUseQuantity('1'); setUseMaintainer(''); setAdjustmentMode('withdraw'); }}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                {selectedPart && (
+                  <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
+                    Update inventory for <Text style={{ fontWeight: '600', color: theme.colors.text }}>{selectedPart.name}</Text>. (Current: {selectedPart.stock_quantity})
+                  </Text>
+                )}
+
+                <View style={[styles.modeToggleContainer, { backgroundColor: theme.colors.background }]}>
+                  <TouchableOpacity
+                    style={[styles.modeTab, adjustmentMode === 'withdraw' && [styles.activeModeTab, { backgroundColor: theme.colors.surface }]]}
+                    onPress={() => setAdjustmentMode('withdraw')}
+                  >
+                    <Text style={[styles.modeTabText, adjustmentMode === 'withdraw' && [styles.activeModeTabText, { color: theme.colors.text }]]}>Withdraw</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modeTab, adjustmentMode === 'restock' && [styles.activeModeTab, { backgroundColor: theme.colors.surface }]]}
+                    onPress={() => setAdjustmentMode('restock')}
+                  >
+                    <Text style={[styles.modeTabText, adjustmentMode === 'restock' && [styles.activeModeTabText, { color: theme.colors.text }]]}>Restock</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Quantity</Text>
+                <View style={styles.qtyAdjustmentContainer}>
+                  <TouchableOpacity
+                    style={[styles.qtyBtn, { backgroundColor: theme.colors.background }]}
+                    onPress={() => setUseQuantity(q => Math.max(1, parseInt(q || '0') - 1).toString())}
+                  >
+                    <Ionicons name="remove" size={24} color={theme.colors.text} />
+                  </TouchableOpacity>
+
+                  <TextInput
+                    style={[styles.qtyInput, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    value={useQuantity}
+                    onChangeText={setUseQuantity}
+                    keyboardType="number-pad"
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.qtyBtn, { backgroundColor: theme.colors.background }]}
+                    onPress={() => setUseQuantity(q => (parseInt(q || '0') + 1).toString())}
+                  >
+                    <Ionicons name="add" size={24} color={theme.colors.text} />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Maintainer / Reason</Text>
+                <TextInput
+                  style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder={adjustmentMode === 'withdraw' ? "Maintainer Name" : "Restock Reason/Name"}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={useMaintainer}
+                  onChangeText={setUseMaintainer}
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={[styles.modalBtnSubmit, { backgroundColor: adjustmentMode === 'withdraw' ? '#EF4444' : '#10B981' }]} onPress={handleUpdateStock}>
+                    <Text style={styles.modalBtnSubmitText}>
+                      {adjustmentMode === 'withdraw' ? 'Confirm Withdrawal' : 'Confirm Restock'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
-
-            {selectedPart && (
-              <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
-                Update inventory for <Text style={{fontWeight: '600', color: theme.colors.text}}>{selectedPart.name}</Text>. (Current: {selectedPart.stock_quantity})
-              </Text>
-            )}
-
-            <View style={[styles.modeToggleContainer, { backgroundColor: theme.colors.background }]}>
-              <TouchableOpacity 
-                style={[styles.modeTab, adjustmentMode === 'withdraw' && [styles.activeModeTab, { backgroundColor: theme.colors.surface }]]}
-                onPress={() => setAdjustmentMode('withdraw')}
-              >
-                <Text style={[styles.modeTabText, adjustmentMode === 'withdraw' && [styles.activeModeTabText, { color: theme.colors.text }]]}>Withdraw</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modeTab, adjustmentMode === 'restock' && [styles.activeModeTab, { backgroundColor: theme.colors.surface }]]}
-                onPress={() => setAdjustmentMode('restock')}
-              >
-                <Text style={[styles.modeTabText, adjustmentMode === 'restock' && [styles.activeModeTabText, { color: theme.colors.text }]]}>Restock</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.inputLabel}>Quantity</Text>
-            <View style={styles.qtyAdjustmentContainer}>
-              <TouchableOpacity 
-                style={[styles.qtyBtn, { backgroundColor: theme.colors.background }]} 
-                onPress={() => setUseQuantity(q => Math.max(1, parseInt(q || '0') - 1).toString())}
-              >
-                <Ionicons name="remove" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-              
-              <TextInput
-                style={[styles.qtyInput, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.text }]}
-                value={useQuantity}
-                onChangeText={setUseQuantity}
-                keyboardType="number-pad"
-              />
-
-              <TouchableOpacity 
-                style={[styles.qtyBtn, { backgroundColor: theme.colors.background }]} 
-                onPress={() => setUseQuantity(q => (parseInt(q || '0') + 1).toString())}
-              >
-                <Ionicons name="add" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={styles.inputLabel}>Maintainer / Reason</Text>
-            <TextInput
-              style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder={adjustmentMode === 'withdraw' ? "Maintainer Name" : "Restock Reason/Name"}
-              placeholderTextColor={theme.colors.textSecondary}
-              value={useMaintainer}
-              onChangeText={setUseMaintainer}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalBtnSubmit, { backgroundColor: adjustmentMode === 'withdraw' ? '#EF4444' : '#10B981' }]} onPress={handleUpdateStock}>
-                <Text style={styles.modalBtnSubmitText}>
-                  {adjustmentMode === 'withdraw' ? 'Confirm Withdrawal' : 'Confirm Restock'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
       {/* Add New Part Modal */}
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%', backgroundColor: theme.colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Register New Part</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Part Name *</Text>
-              <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. O-Ring Seal" placeholderTextColor={theme.colors.textSecondary} value={newName} onChangeText={setNewName} />
-
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Part Number (SKU) *</Text>
-              <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. PN-12345" placeholderTextColor={theme.colors.textSecondary} value={newPartNumber} onChangeText={setNewPartNumber} />
-
-              <Text style={styles.inputLabel}>Category</Text>
-              <TouchableOpacity 
-                style={[styles.dropdownButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                onPress={() => setShowCategoryModal(true)}
-              >
-                <Text style={[newCategory ? styles.dropdownButtonTextValue : styles.dropdownButtonTextPlaceholder, { color: newCategory ? theme.colors.text : theme.colors.textSecondary }]}>
-                  {newCategory || 'Uncategorized (Tap to select)'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-
-              <Text style={styles.inputLabel}>Assign to Equipment (Optional)</Text>
-              <TouchableOpacity 
-                style={[styles.dropdownButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                onPress={() => setShowEquipmentModal(true)}
-              >
-                <Text style={[newEquipmentId ? styles.dropdownButtonTextValue : styles.dropdownButtonTextPlaceholder, { color: newEquipmentId ? theme.colors.text : theme.colors.textSecondary }]}>
-                  {newEquipmentId ? equipments.find(e => e.id === newEquipmentId)?.name : 'Select Equipment (Tap to select)'}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>Initial Stock</Text>
-                  <TextInput style={styles.modalInputFlat} keyboardType="number-pad" placeholder="0" value={newQuantity} onChangeText={setNewQuantity} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>Minimum Threshold</Text>
-                  <TextInput style={styles.modalInputFlat} keyboardType="number-pad" placeholder="5" value={newMinQuantity} onChangeText={setNewMinQuantity} />
-                </View>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            <View style={[styles.modalContent, { maxHeight: '90%', backgroundColor: theme.colors.surface, width: '100%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Register New Part</Text>
+                <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
               </View>
 
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Storage Location</Text>
-              <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. Aisle 4, Bin B" placeholderTextColor={theme.colors.textSecondary} value={newLocation} onChangeText={setNewLocation} />
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Part Name *</Text>
+                <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. O-Ring Seal" placeholderTextColor={theme.colors.textSecondary} value={newName} onChangeText={setNewName} />
 
-              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Keeper Name</Text>
-              <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. John Doe" placeholderTextColor={theme.colors.textSecondary} value={newKeeperName} onChangeText={setNewKeeperName} />
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Part Number (SKU) *</Text>
+                <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. PN-12345" placeholderTextColor={theme.colors.textSecondary} value={newPartNumber} onChangeText={setNewPartNumber} />
 
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>Unit Price</Text>
-                  <TextInput style={styles.modalInputFlat} keyboardType="decimal-pad" placeholder="0.00" value={newPrice} onChangeText={setNewPrice} />
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Category</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                  onPress={() => setShowCategoryModal(true)}
+                >
+                  <Text style={[newCategory ? styles.dropdownButtonTextValue : styles.dropdownButtonTextPlaceholder, { color: newCategory ? theme.colors.text : theme.colors.textSecondary }]}>
+                    {newCategory || 'Uncategorized (Tap to select)'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Assign to Equipment (Optional)</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                  onPress={() => setShowEquipmentModal(true)}
+                >
+                  <Text style={[newEquipmentId ? styles.dropdownButtonTextValue : styles.dropdownButtonTextPlaceholder, { color: newEquipmentId ? theme.colors.text : theme.colors.textSecondary }]}>
+                    {newEquipmentId ? equipments.find(e => e.id === newEquipmentId)?.name : 'Select Equipment (Tap to select)'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Initial Stock</Text>
+                    <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} keyboardType="number-pad" placeholder="0" value={newQuantity} onChangeText={setNewQuantity} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Minimum Threshold</Text>
+                    <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} keyboardType="number-pad" placeholder="5" value={newMinQuantity} onChangeText={setNewMinQuantity} />
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Date Added</Text>
-                  <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textSecondary} value={newDateAdded} onChangeText={setNewDateAdded} />
+
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Storage Location</Text>
+                <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. Aisle 4, Bin B" placeholderTextColor={theme.colors.textSecondary} value={newLocation} onChangeText={setNewLocation} />
+
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Keeper Name</Text>
+                <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="e.g. John Doe" placeholderTextColor={theme.colors.textSecondary} value={newKeeperName} onChangeText={setNewKeeperName} />
+
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Unit Price</Text>
+                    <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} keyboardType="decimal-pad" placeholder="0.00" value={newPrice} onChangeText={setNewPrice} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Date Added</Text>
+                    <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} placeholder="YYYY-MM-DD" placeholderTextColor={theme.colors.textSecondary} value={newDateAdded} onChangeText={setNewDateAdded} />
+                  </View>
                 </View>
+              </ScrollView>
+
+              <View style={[styles.modalActions, { marginTop: 12 }]}>
+                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleAddPart}>
+                  <Text style={styles.modalBtnSubmitText}>Save Part Registry</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-
-            <View style={[styles.modalActions, { marginTop: 12 }]}>
-              <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleAddPart}>
-                <Text style={styles.modalBtnSubmitText}>Save Part Registry</Text>
-              </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -665,7 +679,7 @@ const styles = StyleSheet.create({
   activeModeTab: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
   modeTabText: { fontSize: 14, fontWeight: '500', color: '#6B7280' },
   activeModeTabText: { color: '#111827', fontWeight: '600' },
-  
+
   qtyAdjustmentContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   qtyBtn: { width: 48, height: 48, backgroundColor: '#F3F4F6', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   qtyInput: { flex: 1, height: 48, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, textAlign: 'center', fontSize: 18, fontWeight: '600', color: '#111827' },

@@ -1,9 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
-import React, { useCallback, useState, useRef, useEffect } from 'react'; 
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,15 +16,19 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Modal,
-  Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDB } from '../database';
-import { useTheme } from '../context/ThemeContext';
 import QRCode from 'react-native-qrcode-svg';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
+
+// Safely attempt to require ViewShot
+let ViewShot: any = null;
+try {
+  ViewShot = require('react-native-view-shot').default;
+} catch (e) {
+  console.warn('ViewShot native module not found, using fallbacks.');
+}
 
 
 interface Equipment {
@@ -51,6 +60,7 @@ export default function EquipmentList() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrData, setQRData] = useState({ id: '', name: '' });
   const qrRef = useRef<any>(null);
+  const viewShotRef = useRef<any>(null);
 
   // Load data when screen is focused
   useFocusEffect(
@@ -115,7 +125,7 @@ export default function EquipmentList() {
       case 'Maintenance': return '#F59E0B';
       case 'Inactive': return '#6B7280';
       case 'Retired': return '#EF4444';
-      default: return '#6B7280';
+      default: return '#2563EB'; // Blue for custom
     }
   };
 
@@ -125,7 +135,8 @@ export default function EquipmentList() {
       case 'Under Maintenance': return '#FEF3C7';
       case 'Maintenance': return '#FEF3C7';
       case 'Inactive': return '#F3F4F6';
-      default: return '#FEE2E2';
+      case 'Retired': return '#FEE2E2';
+      default: return '#EFF6FF'; // Light blue for custom
     }
   };
 
@@ -135,14 +146,52 @@ export default function EquipmentList() {
   };
 
   const handleDownloadQR = async () => {
+    try {
+      // Try using ViewShot first (requires native rebuild)
+      if (viewShotRef.current && viewShotRef.current.capture) {
+        const uri = await viewShotRef.current.capture();
+        await Sharing.shareAsync(uri);
+        return;
+      }
+    } catch (error) {
+      console.warn('ViewShot failed, falling back to Print/QRCode:', error);
+    }
+
+    // Fallback: Using expo-print to generate a PDF with border and name
+    // This works in Expo Go and doesn't require a rebuild if expo-print is already present.
     if (qrRef.current) {
       qrRef.current.toDataURL(async (data: string) => {
-        const filename = `QR_${qrData.id}.png`;
-        const filePath = `${FileSystem.documentDirectory}${filename}`;
-        await FileSystem.writeAsStringAsync(filePath, data, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await Sharing.shareAsync(filePath);
+        try {
+          const html = `
+            <html>
+              <head>
+                <style>
+                  body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }
+                  .container { border: 2px solid #e2e8f0; padding: 40px; border-radius: 20px; text-align: center; background: white; }
+                  .id { margin-top: 20px; font-size: 24px; font-weight: bold; font-family: monospace; }
+                  .name { margin-top: 10px; font-size: 20px; color: #374151; }
+                  .caption { margin-top: 15px; font-size: 14px; color: #6b7280; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <img src="data:image/png;base64,${data}" style="width: 300px; height: 300px;" />
+                  <div class="id">${qrData.id}</div>
+                  <div class="name">${qrData.name}</div>
+                  <div class="caption">Scan to view equipment details</div>
+                </div>
+              </body>
+            </html>
+          `;
+          const { uri } = await Print.printToFileAsync({ html });
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Download QR Code' });
+        } catch (printError) {
+          console.error('Print fallback failed:', printError);
+          // Last resort: Save just the QR image base64
+          const filePath = `${FileSystem.documentDirectory}QR_${qrData.id}.png`;
+          await FileSystem.writeAsStringAsync(filePath, data, { encoding: FileSystem.EncodingType.Base64 });
+          await Sharing.shareAsync(filePath);
+        }
       });
     }
   };
@@ -162,14 +211,14 @@ export default function EquipmentList() {
 
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header */}
-          <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
-            <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
-              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-            <View style={{flex: 1, marginLeft: 16}}>
-              <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA Fleet</Text>
-              <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Equipment Inventory & Status</Text>
-            </View>
+        <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATA Fleet</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Equipment Inventory & Status</Text>
+          </View>
           <TouchableOpacity
             style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
             onPress={() => router.push('/add-equipment')}
@@ -204,7 +253,7 @@ export default function EquipmentList() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterScroll}
           >
-            {['All', 'Active', 'Under Maintenance', 'Inactive'].map((filter) => (
+            {['All', 'Active', 'Under Maintenance', 'Inactive', 'Retired'].map((filter) => (
               <TouchableOpacity
                 key={filter}
                 style={[
@@ -265,7 +314,14 @@ export default function EquipmentList() {
               <View style={styles.cardHeader}>
                 <View style={styles.idContainer}>
                   <Text style={[styles.equipmentId, { color: theme.colors.primary }]}>{item.equipment_id}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: theme.dark ? (item.status === 'Active' ? '#064e3b' : (item.status === 'Inactive' ? '#374151' : '#451a03')) : getStatusBackgroundColor(item.status) }]}>
+                  <View style={[styles.statusBadge, { 
+                    backgroundColor: theme.dark 
+                      ? (item.status === 'Active' ? '#064e3b' 
+                        : (item.status === 'Inactive' ? '#374151' 
+                          : (item.status === 'Retired' ? '#7f1d1d' 
+                            : (item.status === 'Under Maintenance' || item.status === 'Maintenance' ? '#451a03' : '#1e3a8a')))) 
+                      : getStatusBackgroundColor(item.status) 
+                  }]}>
                     <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />
                     <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
                       {item.status}
@@ -273,7 +329,7 @@ export default function EquipmentList() {
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => handleOpenQR(item)}
                     style={[styles.qrButton, { backgroundColor: theme.dark ? '#1e293b' : '#f8fafc' }]}
                   >
@@ -348,17 +404,39 @@ export default function EquipmentList() {
                 <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <View style={[styles.qrContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-              <QRCode
-                value={qrData.id}
-                size={220}
-                getRef={(c) => (qrRef.current = c)}
-                color={theme.dark ? '#FFFFFF' : '#111827'}
-                backgroundColor={theme.colors.surface}
-              />
-              <Text style={[styles.qrCodeId, { color: theme.colors.text }]}>{qrData.id}</Text>
-              <Text style={[styles.qrCaption, { color: theme.colors.textSecondary }]}>Scan to view equipment details</Text>
-            </View>
+            {ViewShot ? (
+              <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1.0 }}>
+                <View style={[styles.qrContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                  <View style={styles.qrBorder}>
+                    <QRCode
+                      value={qrData.id}
+                      size={220}
+                      getRef={(c) => (qrRef.current = c)}
+                      color={theme.dark ? '#FFFFFF' : '#111827'}
+                      backgroundColor={theme.colors.surface}
+                    />
+                  </View>
+                  <Text style={[styles.qrCodeId, { color: theme.colors.text }]}>{qrData.id}</Text>
+                  <Text style={[styles.qrCodeName, { color: theme.colors.text }]}>{qrData.name}</Text>
+                  <Text style={[styles.qrCaption, { color: theme.colors.textSecondary }]}>Scan to view equipment details</Text>
+                </View>
+              </ViewShot>
+            ) : (
+              <View style={[styles.qrContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <View style={styles.qrBorder}>
+                  <QRCode
+                    value={qrData.id}
+                    size={220}
+                    getRef={(c) => (qrRef.current = c)}
+                    color={theme.dark ? '#FFFFFF' : '#111827'}
+                    backgroundColor={theme.colors.surface}
+                  />
+                </View>
+                <Text style={[styles.qrCodeId, { color: theme.colors.text }]}>{qrData.id}</Text>
+                <Text style={[styles.qrCodeName, { color: theme.colors.text }]}>{qrData.name}</Text>
+                <Text style={[styles.qrCaption, { color: theme.colors.textSecondary }]}>Scan to view equipment details</Text>
+              </View>
+            )}
             <TouchableOpacity style={[styles.downloadButton, { backgroundColor: theme.colors.primary }]} onPress={handleDownloadQR}>
               <Ionicons name="download-outline" size={20} color="#FFFFFF" />
               <Text style={styles.downloadButtonText}>Save QR Code</Text>
@@ -662,12 +740,25 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     width: '100%',
   },
+  qrBorder: {
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+  },
   qrCodeId: {
     marginTop: 20,
     fontSize: 20,
     fontWeight: '800',
     letterSpacing: 1.5,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  qrCodeName: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   qrCaption: {
     marginTop: 8,

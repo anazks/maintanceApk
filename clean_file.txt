@@ -452,7 +452,7 @@ export default function EquipmentDetails() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA</Text>
+          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>Sujata</Text>
           <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Asset Details</Text>
         </View>
         <View style={styles.headerRight} />

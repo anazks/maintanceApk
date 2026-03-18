@@ -10,7 +10,9 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useWindowDimensions
+  useWindowDimensions,
+  BackHandler,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -308,6 +310,26 @@ export default function Index() {
   useFocusEffect(
     React.useCallback(() => {
       loadDashboardData();
+
+      const onBackPress = () => {
+        Alert.alert(
+          'Exit App',
+          'Are you sure you want to exit the application?',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => {} },
+            { 
+              text: 'Exit', 
+              style: 'destructive', 
+              onPress: () => BackHandler.exitApp() 
+            }
+          ]
+        );
+        return true; // Prevent default behavior
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
     }, [])
   );
 
@@ -406,7 +428,7 @@ export default function Index() {
           <Text style={[styles.brandNameSmall, {
             color: theme.colors.primary,
             fontSize: isSmallScreen ? 12 : 13,
-          }]}>SUJATHA</Text>
+          }]}>SUJATA</Text>
           <TouchableOpacity
             onPress={() => setShowProfileModal(true)}
             activeOpacity={0.7}

@@ -1,21 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  LayoutAnimation,
+  Modal,
+  Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
-  LayoutAnimation,
-  Platform,
   UIManager,
+  View,
 } from 'react-native';
-import { getDB } from '../database';
 import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -46,11 +48,44 @@ export default function RoutineHistory() {
   const { equipmentId, equipment_id, equipmentName } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
+  
+  // Date Filtering State
+  const [fromDate, setFromDate] = useState<string | null>(null);
+  const [toDate, setToDate] = useState<string | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarTarget, setCalendarTarget] = useState<'from' | 'to'>('from');
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+
+  const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
+
+  const changeMonth = (offset: number) => {
+    const newDate = new Date(currentCalendarDate);
+    newDate.setMonth(newDate.getMonth() + offset);
+    setCurrentCalendarDate(newDate);
+  };
+
+  const handleDateSelect = (day: number) => {
+    const selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    
+    if (calendarTarget === 'from') {
+      setFromDate(dateStr);
+    } else {
+      setToDate(dateStr);
+    }
+    setShowCalendar(false);
+  };
 
   const loadHistory = useCallback(() => {
     const db = getDB();
     setLoading(true);
-    
+
     try {
       // Use either camelCase or snake_case param
       const rawId = equipmentId || equipment_id;
@@ -61,11 +96,11 @@ export default function RoutineHistory() {
 
       const equipIdStr = Array.isArray(rawId) ? rawId[0] : rawId;
       let internalId: number;
-      
+
       // Try to find if this equipment exists by string ID first, 
       // because string IDs could be numeric (e.g. "1001")
       const eqByStringId = db.getFirstSync<{ id: number }>('SELECT id FROM Equipment WHERE equipment_id = ?', [equipIdStr]);
-      
+
       if (eqByStringId) {
         internalId = eqByStringId.id;
       } else {
@@ -80,10 +115,21 @@ export default function RoutineHistory() {
         }
       }
 
-      const dbLogs = db.getAllSync<any>(
-        'SELECT * FROM Maintenance_Log WHERE equipment_id = ? ORDER BY maintenance_date DESC',
-        [internalId]
-      );
+      let query = 'SELECT * FROM Maintenance_Log WHERE equipment_id = ?';
+      const params: any[] = [internalId];
+
+      if (fromDate) {
+        query += ' AND maintenance_date >= ?';
+        params.push(`${fromDate} 00:00:00`);
+      }
+      if (toDate) {
+        query += ' AND maintenance_date <= ?';
+        params.push(`${toDate} 23:59:59`);
+      }
+
+      query += ' ORDER BY maintenance_date DESC';
+
+      const dbLogs = db.getAllSync<any>(query, params);
 
       const logsWithItems = dbLogs.map((log: any) => {
         const items = db.getAllSync<any>(`
@@ -110,7 +156,7 @@ export default function RoutineHistory() {
       console.error('Error loading history:', error);
       setLoading(false);
     }
-  }, [equipmentId, equipment_id]);
+  }, [equipmentId, equipment_id, fromDate, toDate]);
 
   useEffect(() => {
     loadHistory();
@@ -118,7 +164,7 @@ export default function RoutineHistory() {
 
   const toggleExpand = (id: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setLogs(prevLogs => prevLogs.map(log => 
+    setLogs(prevLogs => prevLogs.map(log =>
       log.id === id ? { ...log, expanded: !log.expanded } : log
     ));
   };
@@ -133,8 +179,8 @@ export default function RoutineHistory() {
     });
 
     return (
-      <TouchableOpacity 
-        style={[styles.logCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, item.expanded && [styles.logCardExpanded, { borderColor: theme.colors.primary }]]} 
+      <TouchableOpacity
+        style={[styles.logCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, item.expanded && [styles.logCardExpanded, { borderColor: theme.colors.primary }]]}
         onPress={() => toggleExpand(item.id)}
         activeOpacity={0.7}
       >
@@ -145,10 +191,10 @@ export default function RoutineHistory() {
             </View>
             <Text style={[styles.logDate, { color: theme.colors.text }]}>{date}</Text>
           </View>
-          <Ionicons 
-            name={item.expanded ? "chevron-up" : "chevron-down"} 
-            size={20} 
-            color={theme.colors.textSecondary} 
+          <Ionicons
+            name={item.expanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color={theme.colors.textSecondary}
           />
         </View>
 
@@ -165,14 +211,14 @@ export default function RoutineHistory() {
         {item.expanded && (
           <View style={styles.expandedContent}>
             <View style={[styles.separator, { backgroundColor: theme.colors.border }]} />
-            
+
             <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>Checklist Results:</Text>
             {item.items.map((check) => (
               <View key={check.id} style={styles.checkRow}>
-                <Ionicons 
-                  name={check.is_completed ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={check.is_completed ? theme.colors.success : theme.colors.error} 
+                <Ionicons
+                  name={check.is_completed ? "checkmark-circle" : "close-circle"}
+                  size={16}
+                  color={check.is_completed ? theme.colors.success : theme.colors.error}
                 />
                 <Text style={[styles.checkText, { color: theme.colors.text }, !check.is_completed && [styles.checkTextIncomplete, { color: theme.colors.textSecondary }]]}>
                   {check.task_description}
@@ -205,16 +251,52 @@ export default function RoutineHistory() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
-      
+
       <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA History</Text>
+          <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATA History</Text>
           <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{equipmentName || 'Asset History'}</Text>
         </View>
         <View style={{ width: 40 }} />
+      </View>
+
+      {/* Date Filter Bar */}
+      <View style={[styles.filterBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+        <View style={styles.filterInputs}>
+          <TouchableOpacity 
+            style={[styles.dateInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+            onPress={() => { setCalendarTarget('from'); setShowCalendar(true); }}
+          >
+            <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+            <Text style={[styles.dateInputText, { color: fromDate ? theme.colors.text : theme.colors.textSecondary }]}>
+              {fromDate || 'From Date'}
+            </Text>
+          </TouchableOpacity>
+          
+          <Ionicons name="arrow-forward" size={16} color={theme.colors.textSecondary} />
+          
+          <TouchableOpacity 
+            style={[styles.dateInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+            onPress={() => { setCalendarTarget('to'); setShowCalendar(true); }}
+          >
+            <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+            <Text style={[styles.dateInputText, { color: toDate ? theme.colors.text : theme.colors.textSecondary }]}>
+              {toDate || 'To Date'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {(fromDate || toDate) && (
+          <TouchableOpacity 
+            style={styles.clearBtn} 
+            onPress={() => { setFromDate(null); setToDate(null); }}
+          >
+            <Ionicons name="close-circle" size={20} color={theme.colors.error} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
@@ -230,6 +312,70 @@ export default function RoutineHistory() {
           </View>
         }
       />
+
+      <Modal
+        visible={showCalendar}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCalendar(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCalendar(false)}
+        >
+          <View
+            style={[styles.calendarContent, { backgroundColor: theme.colors.surface }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={[styles.calendarHeader, { borderBottomColor: theme.colors.border }]}>
+              <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.calendarNavBtn}>
+                <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+              <Text style={[styles.calendarMonthText, { color: theme.colors.text }]}>
+                {MONTH_NAMES[currentCalendarDate.getMonth()]} {currentCalendarDate.getFullYear()}
+              </Text>
+              <TouchableOpacity onPress={() => changeMonth(1)} style={styles.calendarNavBtn}>
+                <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.calendarDaysHeader}>
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                <Text key={i} style={[styles.calendarDayLabel, { color: theme.colors.textSecondary }]}>{day}</Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {Array.from({ length: getFirstDayOfMonth(currentCalendarDate.getMonth(), currentCalendarDate.getFullYear()) }).map((_, i) => (
+                <View key={`empty-${i}`} style={styles.calendarDayCell} />
+              ))}
+              {Array.from({ length: getDaysInMonth(currentCalendarDate.getMonth(), currentCalendarDate.getFullYear()) }).map((_, i) => {
+                const day = i + 1;
+                const isSelected = (calendarTarget === 'from' && fromDate === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]) ||
+                  (calendarTarget === 'to' && toDate === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]);
+
+                return (
+                  <TouchableOpacity
+                    key={day}
+                    style={[styles.calendarDayCell, isSelected && { backgroundColor: theme.colors.primary, borderRadius: 20 }]}
+                    onPress={() => handleDateSelect(day)}
+                  >
+                    <Text style={[styles.calendarDayText, { color: isSelected ? '#FFFFFF' : theme.colors.text }]}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.calendarCloseBtn, { backgroundColor: theme.colors.background }]}
+              onPress={() => setShowCalendar(false)}
+            >
+              <Text style={[styles.calendarCloseBtnText, { color: theme.colors.textSecondary }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -392,5 +538,105 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  filterInputs: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateInput: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  dateInputText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  calendarContent: {
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    marginBottom: 15,
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarMonthText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  calendarDaysHeader: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  calendarDayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: `${100 / 7}%`,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  calendarCloseBtn: {
+    marginTop: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  calendarCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

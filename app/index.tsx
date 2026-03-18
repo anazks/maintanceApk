@@ -19,7 +19,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" backgroundColor="#0a1d37" />
 
       <ImageBackground
-        source={{ uri: 'https://images.unsplash.com/photo-1540748345200-affb5a1b5b7b?w=800' }} // Naval ship image
+        source={require('../assets/images/home-background.png')}
         style={styles.background}
         resizeMode="cover"
       >
@@ -29,7 +29,7 @@ export default function HomeScreen() {
         <View style={styles.content}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.appTitle}>SUJATHA</Text>
+            <Text style={styles.appTitle}>SUJATA</Text>
             <View style={styles.divider} />
             <Text style={styles.appSubtitle}>Naval Operations</Text>
           </View>
@@ -65,7 +65,7 @@ export default function HomeScreen() {
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              © 2026 SUJATHA Systems • v1.0
+              © 2026 SUJATA Systems • v1.0
             </Text>
           </View>
         </View>

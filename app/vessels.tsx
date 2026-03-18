@@ -153,7 +153,7 @@ export default function VesselsScreen() {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }} keyboardShouldPersistTaps="handled">
                 <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Name</Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}

@@ -1,7 +1,4 @@
 import { router } from 'expo-router';
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { getDB } from '../database';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -17,6 +14,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
 
 const { height } = Dimensions.get('window');
 
@@ -29,7 +29,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) return;
-    
+
     setIsLoggingIn(true);
     try {
       const db = getDB();
@@ -72,7 +72,7 @@ export default function Login() {
         >
           <View style={styles.innerContainer}>
             {/* App Name */}
-            <Text style={[styles.appTitle, { color: theme.colors.primary }]}>SUJATHA</Text>
+            <Text style={[styles.appTitle, { color: theme.colors.primary }]}>SUJATA</Text>
             <Text style={[styles.appSubtitle, { color: theme.colors.textSecondary }]}>Naval Operations</Text>
 
             {/* Login Form */}
@@ -105,9 +105,7 @@ export default function Login() {
                 />
               </View>
 
-              <TouchableOpacity style={styles.forgotPassword}>
-                <Text style={[styles.forgotText, { color: theme.colors.primary }]}>Forgot password?</Text>
-              </TouchableOpacity>
+             
 
               <TouchableOpacity
                 style={[
@@ -134,7 +132,7 @@ export default function Login() {
 
             {/* Footer */}
             <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>
-              © 2026 SUJATHA Fleet Management • v1.0
+              © 2026 SUJATA Fleet Management • v1.0
             </Text>
           </View>
         </ScrollView>

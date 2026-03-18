@@ -21,6 +21,7 @@ import { useTheme } from '../context/ThemeContext';
 
 interface ChecklistItem {
   id: number;
+  routine_no: string;
   task_description: string;
   is_completed: boolean;
 }
@@ -62,7 +63,7 @@ export default function RoutineExecute() {
     const db = getDB();
     try {
       const dbItems = db.getAllSync<ChecklistItem>(
-        'SELECT id, task_description, 0 as is_completed FROM Checklist_Items WHERE schedule_id = ?',
+        'SELECT id, routine_no, task_description, 0 as is_completed FROM Checklist_Items WHERE schedule_id = ?',
         [scheduleId]
       );
       setItems(dbItems.map(item => ({ ...item, is_completed: false })));
@@ -124,11 +125,35 @@ export default function RoutineExecute() {
         itemStmt.finalizeSync();
 
         const nowObj = new Date();
-        let secondsMod = 86400; // 1 day
-        if (scheduleType === 'Weekly') { secondsMod = 604800; }
-        if (scheduleType === 'Monthly') { secondsMod = 2592000; }
-        if (scheduleType === 'Quarterly') { secondsMod = 7776000; }
-        if (scheduleType === 'Yearly') { secondsMod = 31536000; }
+        let secondsMod = 86400; // 1 day default
+        
+        const typeLower = scheduleType.toLowerCase();
+        if (typeLower.includes('daily')) {
+          secondsMod = 86400;
+        } else if (typeLower.includes('weekly')) {
+          secondsMod = 604800;
+        } else if (typeLower.includes('monthly')) {
+          secondsMod = 2592000;
+        } else if (typeLower.includes('quarterly')) {
+          secondsMod = 7776000;
+        } else if (typeLower.includes('yearly')) {
+          secondsMod = 31536000;
+        } else {
+          // Try to parse "X Month" or "X Day"
+          const monthMatch = scheduleType.match(/(\d+)\s*month/i);
+          const dayMatch = scheduleType.match(/(\d+)\s*day/i);
+          const weekMatch = scheduleType.match(/(\d+)\s*week/i);
+          
+          if (monthMatch) {
+            secondsMod = parseInt(monthMatch[1], 10) * 2592000;
+          } else if (dayMatch) {
+            secondsMod = parseInt(dayMatch[1], 10) * 86400;
+          } else if (weekMatch) {
+            secondsMod = parseInt(weekMatch[1], 10) * 604800;
+          } else if (typeLower.includes('occasional')) {
+            secondsMod = 31536000; // Default Occasional to 1 year for reminder, or keep 1 day?
+          }
+        }
 
         const nextDate = new Date(nowObj.getTime() + (secondsMod * 1000));
         const formattedNext = nextDate.toISOString().replace('T', ' ').split('.')[0];
@@ -237,9 +262,16 @@ export default function RoutineExecute() {
                       {item.is_completed && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
                     </View>
                     <View style={styles.taskContent}>
-                      <Text style={[styles.taskDesc, { color: theme.colors.text }, item.is_completed && [styles.taskDescCompleted, { color: theme.colors.textSecondary }]]}>
-                        {item.task_description}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                        {item.routine_no ? (
+                          <Text style={[styles.taskNo, { color: theme.colors.primary }]}>{item.routine_no}. </Text>
+                        ) : null}
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.taskDesc, { color: theme.colors.text }, item.is_completed && [styles.taskDescCompleted, { color: theme.colors.textSecondary }]]}>
+                            {item.task_description}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -320,6 +352,7 @@ const styles = StyleSheet.create({
   checkboxActive: { backgroundColor: '#10B981', borderColor: '#10B981' },
   
   taskContent: { flex: 1 },
+  taskNo: { fontSize: 15, fontWeight: '700', marginRight: 4 },
   taskDesc: { fontSize: 15, color: '#374151' },
   taskDescCompleted: { textDecorationLine: 'line-through', color: '#9CA3AF' },
   

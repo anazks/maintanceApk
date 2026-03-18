@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -11,8 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getDB } from '../database';
 import { useTheme } from '../context/ThemeContext';
+import { getDB } from '../database';
 
 interface RoutineTask {
   id: number;
@@ -31,6 +32,39 @@ export default function Maintenance() {
   const router = useRouter();
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [tasks, setTasks] = useState<RoutineTask[]>([]);
+
+  // Date Filtering State
+  const [fromDate, setFromDate] = useState<string | null>(null);
+  const [toDate, setToDate] = useState<string | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarTarget, setCalendarTarget] = useState<'from' | 'to'>('from');
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+
+  const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
+
+  const changeMonth = (offset: number) => {
+    const newDate = new Date(currentCalendarDate);
+    newDate.setMonth(newDate.getMonth() + offset);
+    setCurrentCalendarDate(newDate);
+  };
+
+  const handleDateSelect = (day: number) => {
+    const selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    
+    if (calendarTarget === 'from') {
+      setFromDate(dateStr);
+    } else {
+      setToDate(dateStr);
+    }
+    setShowCalendar(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -63,7 +97,7 @@ export default function Maintenance() {
         if (task.next_maintenance) {
           formattedDate = task.next_maintenance.split(' ')[0];
           const curDateStr = new Date().toISOString().split('T')[0];
-          
+
           if (formattedDate > curDateStr) {
             currentStatus = 'Completed'; // Future task, locked out
           } else if (formattedDate < curDateStr) {
@@ -98,9 +132,20 @@ export default function Maintenance() {
   };
 
   const filteredTasks = tasks.filter(task => {
-    if (selectedFilter === 'All') return true;
-    if (selectedFilter === 'Pending') return task.status === 'Pending' && task.hasChecklist;
-    return task.status === selectedFilter;
+    // Basic status filter
+    if (selectedFilter !== 'All') {
+      if (selectedFilter === 'Pending') {
+        if (!(task.status === 'Pending' && task.hasChecklist)) return false;
+      } else if (task.status !== selectedFilter) {
+        return false;
+      }
+    }
+
+    // Date range filter
+    if (fromDate && task.scheduled_date < fromDate) return false;
+    if (toDate && task.scheduled_date > toDate) return false;
+
+    return true;
   });
 
   const getPriorityColor = (priority: string) => {
@@ -146,18 +191,62 @@ export default function Maintenance() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.surface} />
-      
+        {/* Date Filter Bar */}
+        <View style={[styles.filterBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+          <View style={styles.filterInputs}>
+            <TouchableOpacity 
+              style={[styles.dateInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+              onPress={() => { setCalendarTarget('from'); setShowCalendar(true); }}
+            >
+              <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+              <Text style={[styles.dateInputText, { color: fromDate ? theme.colors.text : theme.colors.textSecondary }]}>
+                {fromDate || 'From Date'}
+              </Text>
+            </TouchableOpacity>
+            
+            <Ionicons name="arrow-forward" size={16} color={theme.colors.textSecondary} />
+            
+            <TouchableOpacity 
+              style={[styles.dateInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+              onPress={() => { setCalendarTarget('to'); setShowCalendar(true); }}
+            >
+              <Ionicons name="calendar-outline" size={16} color={theme.colors.primary} />
+              <Text style={[styles.dateInputText, { color: toDate ? theme.colors.text : theme.colors.textSecondary }]}>
+                {toDate || 'To Date'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {(fromDate || toDate) && (
+            <TouchableOpacity 
+              style={styles.clearBtn} 
+              onPress={() => { setFromDate(null); setToDate(null); }}
+            >
+              <Ionicons name="close-circle" size={20} color={theme.colors.error} />
+            </TouchableOpacity>
+          )}
+        </View>
+
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header */}
         <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
           <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.colors.background }]}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <View style={{flex: 1, marginLeft: 16}}>
-            <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATHA Service</Text>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATA Service</Text>
             <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Schedules & Work Orders</Text>
           </View>
-          <TouchableOpacity style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}>
+          <TouchableOpacity
+            onPress={loadMaintenanceSchedules}
+            style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', marginRight: 8 }]}
+          >
+            <Ionicons name="refresh" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
+            onPress={() => router.push('/add-equipment')}
+          >
             <Ionicons name="add" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
@@ -169,7 +258,7 @@ export default function Maintenance() {
               <TouchableOpacity
                 key={filter}
                 style={[
-                  styles.filterChip, 
+                  styles.filterChip,
                   { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
                   selectedFilter === filter && [styles.filterChipActive, { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]
                 ]}
@@ -206,7 +295,7 @@ export default function Maintenance() {
                   )}
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: theme.dark ? (item.status === 'Completed' ? '#064e3b' : (item.status === 'Overdue' ? '#451a03' : '#3f2e03')) : getStatusBgColor(item.status), flexDirection: 'row', alignItems: 'center' }]}>
-                  {item.status === 'Completed' && <Ionicons name="lock-closed" size={12} color={getStatusColor(item.status)} style={{marginRight: 4}} />}
+                  {item.status === 'Completed' && <Ionicons name="lock-closed" size={12} color={getStatusColor(item.status)} style={{ marginRight: 4 }} />}
                   <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status}</Text>
                 </View>
               </View>
@@ -214,7 +303,7 @@ export default function Maintenance() {
               <Text style={[styles.description, { color: theme.colors.textSecondary }]} numberOfLines={2}>{item.description}</Text>
 
               <View style={styles.cardFooterActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.historyBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]}
                   onPress={() => router.push({
                     pathname: '/routine-history',
@@ -225,9 +314,9 @@ export default function Maintenance() {
                   <Text style={[styles.historyBtnText, { color: theme.colors.primary }]}>History</Text>
                 </TouchableOpacity>
                 <View style={{ flex: 1 }} />
-                
+
                 {item.hasChecklist && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.smallExecuteBtn, { backgroundColor: theme.colors.primary }, item.status === 'Completed' && [styles.smallExecuteBtnDisabled, { backgroundColor: theme.colors.border }]]}
                     disabled={item.status === 'Completed'}
                     onPress={() => {
@@ -270,6 +359,70 @@ export default function Maintenance() {
             </View>
           )}
         />
+
+        <Modal
+          visible={showCalendar}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowCalendar(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowCalendar(false)}
+          >
+            <View
+              style={[styles.calendarContent, { backgroundColor: theme.colors.surface }]}
+              onStartShouldSetResponder={() => true}
+            >
+              <View style={[styles.calendarHeader, { borderBottomColor: theme.colors.border }]}>
+                <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.calendarNavBtn}>
+                  <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+                <Text style={[styles.calendarMonthText, { color: theme.colors.text }]}>
+                  {MONTH_NAMES[currentCalendarDate.getMonth()]} {currentCalendarDate.getFullYear()}
+                </Text>
+                <TouchableOpacity onPress={() => changeMonth(1)} style={styles.calendarNavBtn}>
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.calendarDaysHeader}>
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                  <Text key={i} style={[styles.calendarDayLabel, { color: theme.colors.textSecondary }]}>{day}</Text>
+                ))}
+              </View>
+
+              <View style={styles.calendarGrid}>
+                {Array.from({ length: getFirstDayOfMonth(currentCalendarDate.getMonth(), currentCalendarDate.getFullYear()) }).map((_, i) => (
+                  <View key={`empty-${i}`} style={styles.calendarDayCell} />
+                ))}
+                {Array.from({ length: getDaysInMonth(currentCalendarDate.getMonth(), currentCalendarDate.getFullYear()) }).map((_, i) => {
+                  const day = i + 1;
+                  const isSelected = (calendarTarget === 'from' && fromDate === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]) ||
+                    (calendarTarget === 'to' && toDate === new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day).toISOString().split('T')[0]);
+
+                  return (
+                    <TouchableOpacity
+                      key={day}
+                      style={[styles.calendarDayCell, isSelected && { backgroundColor: theme.colors.primary, borderRadius: 20 }]}
+                      onPress={() => handleDateSelect(day)}
+                    >
+                      <Text style={[styles.calendarDayText, { color: isSelected ? '#FFFFFF' : theme.colors.text }]}>{day}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.calendarCloseBtn, { backgroundColor: theme.colors.background }]}
+                onPress={() => setShowCalendar(false)}
+              >
+                <Text style={[styles.calendarCloseBtnText, { color: theme.colors.textSecondary }]}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -331,4 +484,104 @@ const styles = StyleSheet.create({
   emptyStateText: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
   cardDisabled: { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB', opacity: 0.95 },
   unlocksText: { fontSize: 12, color: '#D97706', marginTop: 4, fontWeight: '500' },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  filterInputs: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateInput: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  dateInputText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  calendarContent: {
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    marginBottom: 15,
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarMonthText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  calendarDaysHeader: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  calendarDayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: `${100 / 7}%`,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  calendarCloseBtn: {
+    marginTop: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  calendarCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
