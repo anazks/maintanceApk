@@ -1,0 +1,13 @@
+# EAS Build Ignore File
+# We explicitly want the native /android and /ios logic to upload to the EAS servers!
+node_modules/
+.expo/
+dist/
+web-build/
+android/app/build/
+android/.gradle/
+android/.idea/
+ios/Pods/
+ios/build/
+.DS_Store
+*.jks

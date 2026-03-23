@@ -39,5 +39,9 @@ yarn-error.*
 app-example
 
 # generated native folders
-/ios
-/android
+# We explicitly want /android and /ios tracked for custom native modules like PdfExtractor!
+android/app/build
+android/.gradle
+android/.idea
+ios/Pods
+ios/build

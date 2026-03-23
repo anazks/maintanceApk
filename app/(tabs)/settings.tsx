@@ -19,6 +19,7 @@ import {
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
 
 import { useTheme } from '../../context/ThemeContext';
 import { getDB } from '../../database';
@@ -67,6 +68,10 @@ export default function Settings() {
   const [unitSystem, setUnitSystem] = useState<'Metric' | 'Imperial'>('Metric');
   const [language, setLanguage] = useState('English');
   const params = useLocalSearchParams();
+  
+  // Model state
+  const [modelAvailable, setModelAvailable] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
 
   useEffect(() => {
     if (params.tab === 'Categories') {
@@ -82,8 +87,17 @@ export default function Settings() {
     useCallback(() => {
       loadEquipment();
       loadCategories();
+      checkModelAvailability();
     }, [])
   );
+
+  const checkModelAvailability = async () => {
+    try {
+      const targetUri = (FileSystem as any).documentDirectory + 'ai_model.gguf';
+      const info = await FileSystem.getInfoAsync(targetUri);
+      setModelAvailable(info.exists);
+    } catch (e) { console.error(e); }
+  };
 
   useEffect(() => {
     if (selectedEquipment) {
@@ -378,6 +392,41 @@ export default function Settings() {
     }
   };
 
+  const handleUploadModel = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true
+      });
+      
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      
+      const asset = result.assets[0];
+      const sourceUri = asset.uri;
+      
+      setModelLoading(true);
+      const targetUri = (FileSystem as any).documentDirectory + 'ai_model.gguf';
+      
+      const info = await FileSystem.getInfoAsync(targetUri);
+      if (info.exists) {
+        await FileSystem.deleteAsync(targetUri);
+      }
+      
+      await FileSystem.copyAsync({
+        from: sourceUri,
+        to: targetUri
+      });
+      
+      Alert.alert('Success', 'AI Troubleshooting Model is now loaded and available for offline chat!');
+      checkModelAvailability();
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to load model.');
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.surface }]}>
@@ -563,6 +612,27 @@ export default function Settings() {
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { fontSize: 15, fontWeight: '700', color: theme.colors.text }]}>App Preferences</Text>
               <Text style={[styles.sectionSubtitle, { fontSize: 11, marginTop: 0, color: theme.colors.textSecondary }]}>Customize your experience</Text>
+
+              {/* AI Model Loader Placeholder */}
+              <View style={[styles.compactCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 12 }]}>
+                <View style={[styles.actionRow, { borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingBottom: 10, paddingVertical: 10 }]}>
+                  <View style={styles.rowContent}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]}>AI Troubleshooting Model</Text>
+                    <Text style={[styles.rowSubtitle, { color: modelAvailable ? theme.colors.success : theme.colors.error, fontWeight: '500' }]}>
+                      {modelAvailable ? 'Available' : 'Missing'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, opacity: modelLoading ? 0.7 : 1 }} 
+                    onPress={handleUploadModel}
+                    disabled={modelLoading}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+                      {modelLoading ? 'Loading...' : (modelAvailable ? 'Reload Model' : 'Load Model')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               {/* Theme Selector - Compact Version */}
               <View style={[styles.compactCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 12 }]}>

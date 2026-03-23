@@ -24,6 +24,25 @@ import { useTheme } from '../context/ThemeContext';
 import { getDB } from '../database';
 import { handleMessage } from '../services/chatService';
 
+const renderMarkdown = (text: string, baseStyle: any) => {
+  if (!text) return null;
+  // Split by bold (**bold**) or italic (*italic*)
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <Text key={i} style={[{ fontWeight: 'bold' }, baseStyle]}>{part.slice(2, -2)}</Text>;
+        } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+          return <Text key={i} style={[{ fontStyle: 'italic' }, baseStyle]}>{part.slice(1, -1)}</Text>;
+        }
+        return <Text key={i} style={baseStyle}>{part}</Text>;
+      })}
+    </Text>
+  );
+};
+
 const { width } = Dimensions.get('window');
 
 const MONTH_NAMES = [
@@ -144,6 +163,8 @@ export default function EquipmentDetails() {
     equipment_id: ''
   });
 
+  const [hasPDF, setHasPDF] = useState(false);
+
   // Troubleshooting State
   const [troubleshooting, setTroubleshooting] = useState<Troubleshooting[]>([]);
   const [showTroubleModal, setShowTroubleModal] = useState(false);
@@ -161,16 +182,20 @@ export default function EquipmentDetails() {
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', text: string}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const chatScrollRef = React.useRef<ScrollView>(null);
 
   const submitChat = async () => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput.trim();
+    // Snapshot the chat history before appending the current message
+    const historySnapshot = [...chatMessages];
+    
     setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setChatInput('');
     setChatLoading(true);
 
     try {
-      const aiResponse = await handleMessage(userMsg, equipment?.id?.toString());
+      const aiResponse = await handleMessage(userMsg, equipment?.id?.toString(), historySnapshot);
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
     } catch (e: any) {
       setChatMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + e.message }]);
@@ -261,6 +286,9 @@ export default function EquipmentDetails() {
           ORDER BY equipment_id DESC, created_at DESC
         `, [item.id]);
         setTroubleshooting(trouble);
+
+        const pdfDoc = db.getFirstSync<{id: number}>('SELECT id FROM Equipment_Documents WHERE equipment_id = ?', [item.id]);
+        setHasPDF(!!pdfDoc);
 
       } else {
         Alert.alert('Error', 'Equipment not found.');
@@ -644,8 +672,17 @@ export default function EquipmentDetails() {
       
       const parsedText = await NativeModules.PdfExtractorModule.extractText(fileUri);
       
+      if (!parsedText || parsedText.trim() === '') {
+        Alert.alert('Warning', 'The uploaded PDF appears to be a scanned image or contains no readable text. The AI won\'t be able to read it.');
+        // We will still save it so the UI explicitly shows the state or lets AI state it's empty
+      }
+      
       if (!equipment) return;
       const db = getDB();
+      
+      // Delete old PDF for this equipment before inserting
+      db.runSync('DELETE FROM Equipment_Documents WHERE equipment_id = ?', [equipment.id]);
+      
       db.runSync(
         'INSERT INTO Equipment_Documents (equipment_id, file_name, file_uri, parsed_text) VALUES (?, ?, ?, ?)',
         [equipment.id, asset.name, fileUri, parsedText]
@@ -916,24 +953,27 @@ export default function EquipmentDetails() {
 
         {/* Troubleshooting Guides */}
         <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <View style={styles.sectionHeader}>
+          <View style={[styles.sectionHeader, { flexWrap: 'wrap', gap: 12 }]}>
             <View style={styles.sectionHeaderTitleRow}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Troubleshooting Guides</Text>
               <View style={[styles.sectionBadge, { backgroundColor: theme.colors.background }]}>
                 <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{troubleshooting.length}</Text>
               </View>
             </View>
-            <View style={{ flexDirection: 'row' }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <TouchableOpacity
                 style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
-                onPress={() => setShowChatModal(true)}
+                onPress={() => {
+                  setChatMessages([]);
+                  setShowChatModal(true);
+                }}
               >
                 <Ionicons name="chatbubbles-outline" size={16} color={theme.colors.primary} />
                 <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Chat with AI</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE', marginLeft: 8 }]}
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
               onPress={() => {
                 setEditTroubleId(null);
                 setTroubleForm({ problem: '', solution: '', category: 'General', isGeneral: true });
@@ -944,11 +984,13 @@ export default function EquipmentDetails() {
                 <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Add Method</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#064E3B' : '#D1FAE5', borderColor: theme.dark ? '#047857' : '#A7F3D0', marginLeft: 8 }]}
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#064E3B' : '#D1FAE5', borderColor: theme.dark ? '#047857' : '#A7F3D0' }]}
                 onPress={handleUploadPDF}
               >
-                <Ionicons name="document-attach-outline" size={16} color={theme.colors.success} />
-                <Text style={[styles.linkSpareActionText, { color: theme.colors.success }]}>Upload PDF</Text>
+                <Ionicons name={hasPDF ? "checkmark-circle" : "document-attach-outline"} size={16} color={theme.colors.success} />
+                <Text style={[styles.linkSpareActionText, { color: theme.colors.success }]}>
+                  {hasPDF ? 'PDF Loaded' : 'Upload PDF'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1719,20 +1761,39 @@ export default function EquipmentDetails() {
                 <Ionicons name="close-circle-outline" size={28} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ flex: 1, marginBottom: 12 }} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              ref={chatScrollRef}
+              style={{ flex: 1, marginBottom: 12 }} 
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+            >
               {chatMessages.length === 0 && (
                 <Text style={{ textAlign: 'center', marginTop: 20, color: '#9CA3AF' }}>Say hello to start troubleshooting!</Text>
               )}
               {chatMessages.map((msg, index) => (
                 <View key={index} style={{
                   alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  backgroundColor: msg.role === 'user' ? '#DBEAFE' : '#F3F4F6',
-                  padding: 12,
-                  borderRadius: 16,
-                  marginBottom: 8,
-                  maxWidth: '85%'
+                  backgroundColor: msg.role === 'user' ? '#2563EB' : '#FFFFFF',
+                  padding: 14,
+                  borderTopLeftRadius: 18,
+                  borderTopRightRadius: 18,
+                  borderBottomLeftRadius: msg.role === 'user' ? 18 : 4,
+                  borderBottomRightRadius: msg.role === 'user' ? 4 : 18,
+                  marginBottom: 12,
+                  maxWidth: '85%',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 3,
+                  elevation: 1,
+                  borderWidth: msg.role === 'ai' ? 1 : 0,
+                  borderColor: '#F3F4F6'
                 }}>
-                  <Text style={{ color: msg.role === 'user' ? '#1E40AF' : '#1F2937', fontSize: 15 }}>{msg.text}</Text>
+                  {renderMarkdown(msg.text, { 
+                    color: msg.role === 'user' ? '#FFFFFF' : '#1F2937', 
+                    fontSize: 15, 
+                    lineHeight: 22 
+                  })}
                 </View>
               ))}
               {chatLoading && (
