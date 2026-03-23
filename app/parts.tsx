@@ -58,6 +58,7 @@ export default function SpareParts() {
   const [newPrice, setNewPrice] = useState('');
   const [newDateAdded, setNewDateAdded] = useState(new Date().toISOString().split('T')[0]);
   const [newEquipmentId, setNewEquipmentId] = useState<number | null>(null);
+  const [editingPart, setEditingPart] = useState<SparePart | null>(null);
 
   // Category & Equipment State
   const [categories, setCategories] = useState<{ id: number, name: string }[]>([]);
@@ -189,40 +190,60 @@ export default function SpareParts() {
     }
   };
 
-  const handleAddPart = () => {
+  const handleSavePart = () => {
     if (!newName || !newPartNumber) {
       Alert.alert('Validation Error', 'Name and Part Number are required.');
       return;
     }
     const db = getDB();
     try {
-      const insertResult = db.runSync(`
-        INSERT INTO Spare_Parts (
-          name, part_number, category, available_quantity, minimum_quantity, price, location, keeper_name, date_added
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        newName,
-        newPartNumber,
-        newCategory || 'Uncategorized',
-        parseFloat(newQuantity) || 0,
-        parseFloat(newMinQuantity) || 5,
-        newPrice || '0.00',
-        newLocation || 'N/A',
-        newKeeperName || 'Unassigned',
-        newDateAdded || new Date().toISOString().split('T')[0]
-      ]);
+      if (editingPart) {
+        // Update existing part
+        db.runSync(`
+          UPDATE Spare_Parts SET 
+            name = ?, part_number = ?, category = ?, available_quantity = ?, 
+            minimum_quantity = ?, price = ?, location = ?, keeper_name = ?, date_added = ?
+          WHERE id = ?
+        `, [
+          newName,
+          newPartNumber,
+          newCategory || 'Uncategorized',
+          parseFloat(newQuantity) || 0,
+          parseFloat(newMinQuantity) || 5,
+          newPrice || '0.00',
+          newLocation || 'N/A',
+          newKeeperName || 'Unassigned',
+          newDateAdded,
+          editingPart.id
+        ]);
+        Alert.alert('Success', 'Part updated successfully');
+      } else {
+        // Insert new part
+        const insertResult = db.runSync(`
+          INSERT INTO Spare_Parts (
+            name, part_number, category, available_quantity, minimum_quantity, price, location, keeper_name, date_added
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          newName,
+          newPartNumber,
+          newCategory || 'Uncategorized',
+          parseFloat(newQuantity) || 0,
+          parseFloat(newMinQuantity) || 5,
+          newPrice || '0.00',
+          newLocation || 'N/A',
+          newKeeperName || 'Unassigned',
+          newDateAdded || new Date().toISOString().split('T')[0]
+        ]);
 
-      const spareId = insertResult.lastInsertRowId;
+        const spareId = insertResult.lastInsertRowId;
 
-      if (newEquipmentId) {
-        db.runSync(
-          'INSERT INTO Equipment_Spares (equipment_id, spare_id, linked_by) VALUES (?, ?, ?)',
-          [newEquipmentId, spareId, newKeeperName || 'Admin']
-        );
-
-        // If initial quantity was provided, maybe record it as setup use? 
-        // Or just link it. Usually "Add Part" is inventory.
-        // But if they select equipment, it implies it's for that equipment.
+        if (newEquipmentId) {
+          db.runSync(
+            'INSERT INTO Equipment_Spares (equipment_id, spare_id, linked_by) VALUES (?, ?, ?)',
+            [newEquipmentId, spareId, newKeeperName || 'Admin']
+          );
+        }
+        Alert.alert('Success', 'Part added successfully');
       }
 
       // Reset Form State
@@ -230,6 +251,7 @@ export default function SpareParts() {
       setNewQuantity(''); setNewMinQuantity('5'); setNewLocation(''); setNewKeeperName(''); setNewPrice('');
       setNewDateAdded(new Date().toISOString().split('T')[0]);
       setNewEquipmentId(null);
+      setEditingPart(null);
       setShowAddModal(false);
       loadParts();
     } catch (e: any) {
@@ -237,9 +259,52 @@ export default function SpareParts() {
       if (e.message?.includes('UNIQUE')) {
         Alert.alert('Duplicate', 'A part with this Part Number already exists.');
       } else {
-        Alert.alert('Error', 'Failed to add spare part.');
+        Alert.alert('Error', editingPart ? 'Failed to update part' : 'Failed to add spare part.');
       }
     }
+  };
+
+  const startEditing = (part: SparePart) => {
+    setEditingPart(part);
+    setNewName(part.name);
+    setNewPartNumber(part.part_number);
+    setNewCategory(part.category === 'Uncategorized' ? '' : part.category);
+    setNewQuantity(part.stock_quantity.toString());
+    setNewMinQuantity(part.minimum_quantity.toString());
+    setNewLocation(part.location === 'N/A' ? '' : part.location);
+    setNewKeeperName(part.keeper_name === 'Unassigned' ? '' : part.keeper_name);
+    setNewPrice(part.unit_price.toString());
+    setNewDateAdded(part.date_added);
+    setShowAddModal(true);
+  };
+
+  const handleDeletePart = (id: number) => {
+    Alert.alert(
+      'Confirm Delete',
+      'Are you sure you want to delete this spare part? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: () => {
+            const db = getDB();
+            try {
+              db.withTransactionSync(() => {
+                db.runSync('DELETE FROM Spare_Usage WHERE spare_id = ?', [id]);
+                db.runSync('DELETE FROM Equipment_Spares WHERE spare_id = ?', [id]);
+                db.runSync('DELETE FROM Spare_Parts WHERE id = ?', [id]);
+              });
+              loadParts();
+              Alert.alert('Success', 'Part deleted successfully');
+            } catch (e) {
+              console.error(e);
+              Alert.alert('Error', 'Failed to delete part');
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -256,7 +321,17 @@ export default function SpareParts() {
             <Text style={[styles.brandTitle, { color: theme.colors.primary }]}>SUJATA Spares</Text>
             <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Inventory & Stock Control</Text>
           </View>
-          <TouchableOpacity style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]} onPress={() => setShowAddModal(true)}>
+          <TouchableOpacity 
+            style={[styles.addButtonSmall, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF' }]} 
+            onPress={() => {
+              setEditingPart(null);
+              setNewName(''); setNewPartNumber(''); setNewCategory('');
+              setNewQuantity(''); setNewMinQuantity('5'); setNewLocation(''); setNewKeeperName(''); setNewPrice('');
+              setNewDateAdded(new Date().toISOString().split('T')[0]);
+              setNewEquipmentId(null);
+              setShowAddModal(true);
+            }}
+          >
             <Ionicons name="add" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
@@ -306,20 +381,22 @@ export default function SpareParts() {
             const isLowStock = item.stock_quantity <= item.minimum_quantity;
 
             return (
-              <TouchableOpacity
+              <View
                 style={[
                   styles.card,
                   { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                   isLowStock && { backgroundColor: theme.dark ? '#450a0a' : '#FEF2F2', borderColor: theme.dark ? '#7f1d1d' : '#FCA5A5' }
                 ]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setSelectedPart(item);
-                  setShowUsageModal(true);
-                }}
               >
-                <View style={styles.cardHeader}>
-                  <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingRight: 8 }}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setSelectedPart(item);
+                      setShowUsageModal(true);
+                    }}
+                  >
                     <Text style={[styles.partName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
                     <View style={styles.idContainer}>
                       <Text style={[styles.partId, { color: theme.colors.textSecondary }]}>{item.part_number}</Text>
@@ -327,28 +404,43 @@ export default function SpareParts() {
                       <Text style={[styles.category, { color: theme.colors.textSecondary }]}>{item.category}</Text>
                     </View>
                     <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>Added: {item.date_added}</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: getStockBgColor(status) }]}>
-                    <Text style={[styles.statusText, { color: getStockColor(status) }]}>
-                      {item.stock_quantity} in stock
+                    
+                    <View style={[styles.cardFooter, { borderTopColor: theme.colors.border, marginTop: 12, paddingTop: 12 }]}>
+                      <View style={styles.footerItemGrp}>
+                        <View style={styles.footerItem}>
+                          <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
+                          <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Loc: {item.location}</Text>
+                        </View>
+                        <View style={styles.footerItem}>
+                          <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
+                          <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Kp: {item.keeper_name}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={{ alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                    <View style={[styles.statusBadge, { backgroundColor: getStockBgColor(status) }]}>
+                      <Text style={[styles.statusText, { color: getStockColor(status) }]}>
+                        {item.stock_quantity}
+                      </Text>
+                    </View>
+                    
+                    <View style={{ gap: 12, marginTop: 12 }}>
+                      <TouchableOpacity style={styles.actionIconButton} onPress={() => startEditing(item)}>
+                        <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.actionIconButton} onPress={() => handleDeletePart(item.id)}>
+                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={[styles.price, { color: theme.colors.text, marginTop: 'auto' }]}>
+                      {item.unit_price.toFixed(2)}
                     </Text>
                   </View>
                 </View>
-
-                <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
-                  <View style={styles.footerItemGrp}>
-                    <View style={styles.footerItem}>
-                      <Ionicons name="location-outline" size={14} color={theme.colors.textSecondary} />
-                      <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Loc: {item.location}</Text>
-                    </View>
-                    <View style={styles.footerItem}>
-                      <Ionicons name="person-outline" size={14} color={theme.colors.textSecondary} />
-                      <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Kp: {item.keeper_name}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.price, { color: theme.colors.text }]}>{item.unit_price.toFixed(2)}</Text>
-                </View>
-              </TouchableOpacity>
+              </View>
             );
           }}
         />
@@ -446,7 +538,9 @@ export default function SpareParts() {
           >
             <View style={[styles.modalContent, { maxHeight: '90%', backgroundColor: theme.colors.surface, width: '100%' }]}>
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Register New Part</Text>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                  {editingPart ? 'Edit Part Registry' : 'Register New Part'}
+                </Text>
                 <TouchableOpacity onPress={() => setShowAddModal(false)}>
                   <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
@@ -470,16 +564,20 @@ export default function SpareParts() {
                   <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
 
-                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Assign to Equipment (Optional)</Text>
-                <TouchableOpacity
-                  style={[styles.dropdownButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                  onPress={() => setShowEquipmentModal(true)}
-                >
-                  <Text style={[newEquipmentId ? styles.dropdownButtonTextValue : styles.dropdownButtonTextPlaceholder, { color: newEquipmentId ? theme.colors.text : theme.colors.textSecondary }]}>
-                    {newEquipmentId ? equipments.find(e => e.id === newEquipmentId)?.name : 'Select Equipment (Tap to select)'}
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
+                {!editingPart && (
+                  <>
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Assign to Equipment (Optional)</Text>
+                    <TouchableOpacity
+                      style={[styles.dropdownButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                      onPress={() => setShowEquipmentModal(true)}
+                    >
+                      <Text style={[newEquipmentId ? styles.dropdownButtonTextValue : styles.dropdownButtonTextPlaceholder, { color: newEquipmentId ? theme.colors.text : theme.colors.textSecondary }]}>
+                        {newEquipmentId ? equipments.find(e => e.id === newEquipmentId)?.name : 'Select Equipment (Tap to select)'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                  </>
+                )}
 
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <View style={{ flex: 1 }}>
@@ -511,8 +609,10 @@ export default function SpareParts() {
               </ScrollView>
 
               <View style={[styles.modalActions, { marginTop: 12 }]}>
-                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleAddPart}>
-                  <Text style={styles.modalBtnSubmitText}>Save Part Registry</Text>
+                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleSavePart}>
+                  <Text style={styles.modalBtnSubmitText}>
+                    {editingPart ? 'Update Part Registry' : 'Save Part Registry'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -683,4 +783,5 @@ const styles = StyleSheet.create({
   qtyAdjustmentContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   qtyBtn: { width: 48, height: 48, backgroundColor: '#F3F4F6', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   qtyInput: { flex: 1, height: 48, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, textAlign: 'center', fontSize: 18, fontWeight: '600', color: '#111827' },
+  actionIconButton: { padding: 4 },
 });

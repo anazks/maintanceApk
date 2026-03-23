@@ -64,6 +64,7 @@ export default function Settings() {
   const [showCustomRoutineModal, setShowCustomRoutineModal] = useState(false);
   const [newRoutineName, setNewRoutineName] = useState('');
   const [availableSchedules, setAvailableSchedules] = useState<string[]>(DEFAULT_SCHEDULES);
+  const [equipSearchQuery, setEquipSearchQuery] = useState('');
   const [unitSystem, setUnitSystem] = useState<'Metric' | 'Imperial'>('Metric');
   const [language, setLanguage] = useState('English');
   const params = useLocalSearchParams();
@@ -850,13 +851,34 @@ export default function Settings() {
                   <Ionicons name="refresh" size={20} color={theme.colors.primary} />
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => setShowEquipModal(false)}>
+              <TouchableOpacity onPress={() => { setShowEquipModal(false); setEquipSearchQuery(''); }}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
+            <View style={[styles.modalSearchContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+              <Ionicons name="search-outline" size={20} color={theme.colors.textSecondary} />
+              <TextInput
+                style={[styles.modalSearchInput, { color: theme.colors.text }]}
+                placeholder="Search equipment..."
+                placeholderTextColor={theme.colors.textSecondary}
+                value={equipSearchQuery}
+                onChangeText={setEquipSearchQuery}
+              />
+              {equipSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setEquipSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
             <ScrollView style={{ width: '100%' }}>
-              {equipmentList.map(eq => (
+              {equipmentList
+                .filter(eq => 
+                  eq.name.toLowerCase().includes(equipSearchQuery.toLowerCase()) || 
+                  eq.equipment_id.toLowerCase().includes(equipSearchQuery.toLowerCase())
+                )
+                .map(eq => (
                 <TouchableOpacity
                   key={eq.id}
                   style={[
@@ -865,6 +887,7 @@ export default function Settings() {
                   ]}
                   onPress={() => {
                     setSelectedEquipment(eq.id);
+                    setEquipSearchQuery('');
                     setShowEquipModal(false);
                   }}
                 >
@@ -877,6 +900,15 @@ export default function Settings() {
                   )}
                 </TouchableOpacity>
               ))}
+              {equipmentList.filter(eq => 
+                  eq.name.toLowerCase().includes(equipSearchQuery.toLowerCase()) || 
+                  eq.equipment_id.toLowerCase().includes(equipSearchQuery.toLowerCase())
+                ).length === 0 && (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Ionicons name="search-outline" size={48} color={theme.colors.border} />
+                  <Text style={{ color: theme.colors.textSecondary, marginTop: 12 }}>No equipment matches your search</Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -1074,5 +1106,21 @@ const styles = StyleSheet.create({
   themeOptionLabelSmall: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  modalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
   },
 });
