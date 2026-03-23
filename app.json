@@ -2,7 +2,7 @@
   "expo": {
     "name": "SUJATA",
     "slug": "sujatha",
-     "version": "1.0.0",
+    "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "Sujata",
@@ -76,7 +76,8 @@
           "bluetoothAlwaysPermission": "Allow Sujata to use Bluetooth for local data synchronization."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "llama.rn"
     ],
     "experiments": {
       "typedRoutes": true,

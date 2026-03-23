@@ -177,6 +177,14 @@ export default function Dashboard() {
           </View>
 
         </ScrollView>
+        
+        {/* Floating Chatbot Button */}
+        <TouchableOpacity 
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]} 
+          onPress={() => router.push('/chat')}
+        >
+          <Ionicons name="chatbubble-ellipses" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -241,5 +249,20 @@ const styles = StyleSheet.create({
   healthBarFill: { height: '100%', borderRadius: 3 },
   healthScoreContainer: { alignItems: 'flex-end', minWidth: 70, paddingLeft: 16 },
   healthScore: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  healthStatus: { fontSize: 11, color: '#6B7280', fontWeight: '500' }
+  healthStatus: { fontSize: 11, color: '#6B7280', fontWeight: '500' },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  }
 });

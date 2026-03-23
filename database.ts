@@ -147,6 +147,15 @@ export const initDB = () => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (equipment_id) REFERENCES Equipment (id)
       )`,
+      `CREATE TABLE IF NOT EXISTS Equipment_Documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        equipment_id INTEGER NOT NULL,
+        file_name TEXT NOT NULL,
+        file_uri TEXT NOT NULL,
+        parsed_text TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (equipment_id) REFERENCES Equipment (id)
+      )`,
       `CREATE TABLE IF NOT EXISTS System_Settings (
         key TEXT PRIMARY KEY,
         value TEXT

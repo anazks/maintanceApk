@@ -18,8 +18,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import * as DocumentPicker from 'expo-document-picker';
+import { NativeModules } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { getDB } from '../database';
+import { handleMessage } from '../services/chatService';
 
 const { width } = Dimensions.get('window');
 
@@ -152,6 +155,29 @@ export default function EquipmentDetails() {
     isGeneral: true
   });
   const [editTroubleId, setEditTroubleId] = useState<number | null>(null);
+
+  // Chat Interface State
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', text: string}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const submitChat = async () => {
+    if (!chatInput.trim()) return;
+    const userMsg = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const aiResponse = await handleMessage(userMsg, equipment?.id?.toString());
+      setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
+    } catch (e: any) {
+      setChatMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + e.message }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -597,6 +623,44 @@ export default function EquipmentDetails() {
     );
   };
 
+  const handleUploadPDF = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true
+      });
+      
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      
+      const asset = result.assets[0];
+      const fileUri = asset.uri;
+      
+      setLoading(true);
+      if (!NativeModules.PdfExtractorModule) {
+        Alert.alert('Error', 'PdfExtractorModule native library is not linked. Please build the Android app using Android Studio first.');
+        setLoading(false);
+        return;
+      }
+      
+      const parsedText = await NativeModules.PdfExtractorModule.extractText(fileUri);
+      
+      if (!equipment) return;
+      const db = getDB();
+      db.runSync(
+        'INSERT INTO Equipment_Documents (equipment_id, file_name, file_uri, parsed_text) VALUES (?, ?, ?, ?)',
+        [equipment.id, asset.name, fileUri, parsedText]
+      );
+      
+      Alert.alert('Success', 'PDF uploaded and processed. Chatbot can now read this manual!');
+      loadDetails(equipment.id);
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to read PDF: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Helper for Calendar
   const getDaysInMonth = (month: number, year: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -859,9 +923,17 @@ export default function EquipmentDetails() {
                 <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{troubleshooting.length}</Text>
               </View>
             </View>
-            {isAdmin && (
+            <View style={{ flexDirection: 'row' }}>
               <TouchableOpacity
                 style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
+                onPress={() => setShowChatModal(true)}
+              >
+                <Ionicons name="chatbubbles-outline" size={16} color={theme.colors.primary} />
+                <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Chat with AI</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE', marginLeft: 8 }]}
               onPress={() => {
                 setEditTroubleId(null);
                 setTroubleForm({ problem: '', solution: '', category: 'General', isGeneral: true });
@@ -871,7 +943,14 @@ export default function EquipmentDetails() {
                 <Ionicons name="add" size={16} color={theme.colors.primary} />
                 <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Add Method</Text>
               </TouchableOpacity>
-            )}
+              <TouchableOpacity
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#064E3B' : '#D1FAE5', borderColor: theme.dark ? '#047857' : '#A7F3D0', marginLeft: 8 }]}
+                onPress={handleUploadPDF}
+              >
+                <Ionicons name="document-attach-outline" size={16} color={theme.colors.success} />
+                <Text style={[styles.linkSpareActionText, { color: theme.colors.success }]}>Upload PDF</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {troubleshooting.length === 0 ? (
@@ -1627,6 +1706,70 @@ export default function EquipmentDetails() {
         </View>
       </Modal>
 
+      {/* Chat Modal */}
+      <Modal visible={showChatModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%', flex: 1 }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>AI Troubleshooter</Text>
+                <Text style={styles.modalSub}>Ask questions based on PDF manuals.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowChatModal(false)}>
+                <Ionicons name="close-circle-outline" size={28} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ flex: 1, marginBottom: 12 }} showsVerticalScrollIndicator={false}>
+              {chatMessages.length === 0 && (
+                <Text style={{ textAlign: 'center', marginTop: 20, color: '#9CA3AF' }}>Say hello to start troubleshooting!</Text>
+              )}
+              {chatMessages.map((msg, index) => (
+                <View key={index} style={{
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  backgroundColor: msg.role === 'user' ? '#DBEAFE' : '#F3F4F6',
+                  padding: 12,
+                  borderRadius: 16,
+                  marginBottom: 8,
+                  maxWidth: '85%'
+                }}>
+                  <Text style={{ color: msg.role === 'user' ? '#1E40AF' : '#1F2937', fontSize: 15 }}>{msg.text}</Text>
+                </View>
+              ))}
+              {chatLoading && (
+                <View style={{ alignSelf: 'flex-start', backgroundColor: '#F3F4F6', padding: 12, borderRadius: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#4B5563" />
+                  <Text style={{ marginLeft: 8, color: '#4B5563' }}>AI is thinking...</Text>
+                </View>
+              )}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput
+                style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                placeholder="Describe the issue..."
+                value={chatInput}
+                onChangeText={setChatInput}
+                onSubmitEditing={submitChat}
+                editable={!chatLoading}
+              />
+              <TouchableOpacity
+                style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 16, opacity: chatLoading ? 0.5 : 1 }}
+                onPress={submitChat}
+                disabled={chatLoading}
+              >
+                <Ionicons name="send" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Floating Chatbot Button */}
+      <TouchableOpacity 
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]} 
+        onPress={() => setShowChatModal(true)}
+      >
+        <Ionicons name="chatbubble-ellipses" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -2192,12 +2335,7 @@ const styles = StyleSheet.create({
     padding: 24,
     maxHeight: '95%'
   },
-  editModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 24,
-    maxHeight: '95%'
-  },
+
   assignModalContent: {
     maxHeight: '90%'
   },
@@ -2456,5 +2594,20 @@ const styles = StyleSheet.create({
   troubleSolution: {
     fontSize: 14,
     lineHeight: 20
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
   }
 });
