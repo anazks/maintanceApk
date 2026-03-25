@@ -11,4 +11,19 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# llama.rn
+-keep class com.rnllama.** { *; }
+-keep class com.rnllama.LlamaContext { *; }
+
+# pdfbox-android
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class org.apache.fontbox.** { *; }
+-keep class org.apache.pdfbox.** { *; }
+
+# expo-sqlite
+-keep class io.expo.modules.sqlite.** { *; }
+
+# react-native-worklets
+-keep class com.shopify.reactnative.worklets.** { *; }
+
 # Add any project specific keep options here:

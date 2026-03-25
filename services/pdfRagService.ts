@@ -20,7 +20,7 @@ export function searchPdfContext(textChunks: string[], query: string): string {
   const docs = textChunks.map((c, i) => ({ id: i, text: c }));
   const fuse = new Fuse(docs, {
     keys: ['text'],
-    threshold: 0.6, // Lenient semantic/keyword fallback
+    threshold: 0.35, // Stricter matching to avoid irrelevant context
     ignoreLocation: true, // Crucial for matching text anywhere in long chunks
     includeScore: true
   });

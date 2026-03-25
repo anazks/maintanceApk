@@ -5,7 +5,6 @@ import android.content.res.Configuration
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
-import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.ReactHost
@@ -15,6 +14,7 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
+import com.facebook.soloader.SoLoader
 
 class MainApplication : Application(), ReactApplication {
 
@@ -41,10 +41,25 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    DefaultNewArchitectureEntryPoint.releaseLevel = try {
-      ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
-    } catch (e: IllegalArgumentException) {
-      ReleaseLevel.STABLE
+    SoLoader.init(this, false)
+    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+      try {
+        // Force-load the local (Java) feature flags accessor to bypass failing C++ JNI bridge
+        val ffClass = Class.forName("com.facebook.react.internal.featureflags.ReactNativeFeatureFlags")
+        val localAccessorClass = Class.forName("com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsLocalAccessor")
+        val localAccessor = localAccessorClass.getDeclaredConstructor().newInstance()
+        val accessorField = ffClass.getDeclaredField("accessor")
+        accessorField.isAccessible = true
+        accessorField.set(ffClass.getField("INSTANCE").get(null), localAccessor)
+      } catch (e: Throwable) {
+        // Fallback or log if reflection fails
+      }
+
+      try {
+        DefaultNewArchitectureEntryPoint.load()
+      } catch (e: Throwable) {
+        // Fallback or log. In 0.81.5, some core libs can be missing or merged.
+      }
     }
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }

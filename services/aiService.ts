@@ -5,7 +5,7 @@ let llamaContext: LlamaContext | null = null;
 
 export interface ChatMessage { role: string, text: string }
 
-export async function askAI(prompt: string, pdfContext: string = "", chatHistory: ChatMessage[] = []): Promise<string> {
+export async function askAI(prompt: string, pdfContext: string = "", chatHistory: ChatMessage[] = [], equipName: string = "Equipment"): Promise<string> {
   const MODEL_PATH = (FileSystem as any).documentDirectory + 'ai_model.gguf';
 
   if (!llamaContext) {
@@ -19,23 +19,33 @@ export async function askAI(prompt: string, pdfContext: string = "", chatHistory
         model: MODEL_PATH,
         use_mlock: true,
         n_ctx: 2048,
-        n_gpu_layers: 1, // Optional: adjust for small offload
+        n_threads: 4, // Optimize for quad-core mobile CPUs
+        n_gpu_layers: 1,
       });
     } catch (e: any) {
       throw new Error("Failed to load Llama model.\nOriginal Error: " + e.message);
     }
   }
 
-  let systemPrompt = `You are an expert, friendly maintenance assistant.
-Provide clear troubleshooting instructions based solely on the referenced text below.
-CRITICAL RULES:
-1. DO NOT use phrases like "According to the manual", "Based on the excerpt", or "The text says". Give the instructions directly and confidently as your own expert knowledge.
-2. DO NOT invent steps or use outside knowledge.
-3. DO NOT use bullet points or lists. Write a single, easy-to-read, conversational paragraph.`;
+  let systemPrompt = `Role: Professional Technical Support Assistant for Industrial Equipment: '${equipName}'.
+STRICT MANUAL MODE:
+1. Use ONLY the provided manual context below to answer technical questions.
+2. If the context does not contain the answer, you MUST say EXACTLY this FIRST: "I'm sorry, but the current manual does not contain specific information regarding this issue. Please consult a senior supervisor or refer to the manufacturer's extended documentation."
+3. ONLY AFTER the fallback message above, you may suggest basic industrial troubleshooting (e.g. check power, physical inspection) specific to '${equipName}'.
+4. NEVER mention CPUs, computers, or office electronics. Stay focused on the industrial context of '${equipName}'.
+
+GREETINGS:
+- Respond friendly: "Hello! How can I assist with troubleshooting the '${equipName}' today?"
+- Do NOT show the "no info" message for greetings.
+
+STYLE:
+- Professional, safety-conscious, concise.
+- Use bullet points for steps.
+- DO NOT say "According to the manual".`;
   if (pdfContext) {
-    systemPrompt += `\nReference this manual context ONLY to help the technician:\n${pdfContext}`;
+    systemPrompt += `\nReference this manual context ONLY for '${equipName}':\n${pdfContext}`;
   } else {
-    systemPrompt += `\n(There is no specific manual uploaded yet. Politely mention the user can use 'Upload PDF' if they have one.)`;
+    systemPrompt += `\nSTRICT: No manual is uploaded for '${equipName}'. For technical questions, follow the 'STRICT MANUAL MODE' fallback protocol.`;
   }
 
   let structuredPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemPrompt}<|eot_id|>`;
@@ -56,7 +66,7 @@ CRITICAL RULES:
   try {
     const msgResult = await llamaContext.completion({
       prompt: structuredPrompt,
-      n_predict: 400, // Increased generation limit to prevent empty/cut-off messages
+      n_predict: 256, // Optimized for concise troubleshooting steps
       stop: stopWords
     });
 

@@ -22,3 +22,35 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+subprojects {
+    plugins.withType(com.android.build.gradle.LibraryPlugin) {
+        android {
+            def name = project.name
+            if (namespace == null) {
+                if (name == "llama.rn") {
+                    namespace = "com.rnllama"
+                } else if (name == "react-native-reanimated") {
+                    namespace = "com.swmansion.reanimated"
+                } else if (name == "react-native-gesture-handler") {
+                    namespace = "com.swmansion.gesturehandler"
+                } else if (name == "react-native-screens") {
+                    namespace = "com.swmansion.rnscreens"
+                } else if (name == "react-native-safe-area-context") {
+                    namespace = "com.th3rdwave.safeareacontext"
+                } else if (name == "react-native-svg") {
+                    namespace = "com.horcrux.svg"
+                } else if (name == "react-native-async-storage_async-storage") {
+                    namespace = "com.reactnativecommunity.asyncstorage"
+                } else {
+                    namespace = project.group ?: "com.${name.replace('-', '.')}"
+                }
+            }
+            buildFeatures {
+                buildConfig true
+            }
+        }
+    }
+}
+
+

@@ -36,4 +36,15 @@ rootProject.name = 'SUJATA'
 expoAutolinking.useExpoVersionCatalog()
 
 include ':app'
+// include ':react-native-async-storage_async-storage'
+// project(':react-native-async-storage_async-storage').projectDir = new File(rootDir, '../node_modules/@react-native-async-storage/async-storage/android')
+
 includeBuild(expoAutolinking.reactNativeGradlePlugin)
+
+gradle.settingsEvaluated { settings ->
+    settings.rootProject.children.each { proj ->
+        if (proj.projectDir.absolutePath.contains("Projects ")) {
+            proj.projectDir = new File(proj.projectDir.absolutePath.replace("Projects ", "Projects"))
+        }
+    }
+}
