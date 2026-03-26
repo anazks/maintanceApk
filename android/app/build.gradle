@@ -179,5 +179,4 @@ dependencies {
     } else {
         implementation jscFlavor
     }
-    implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
 }
