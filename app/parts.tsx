@@ -65,6 +65,7 @@ export default function SpareParts() {
   const [equipments, setEquipments] = useState<{ id: number, name: string }[]>([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
+  const [equipmentSearchQuery, setEquipmentSearchQuery] = useState('');
 
   useEffect(() => {
     loadParts();
@@ -111,9 +112,9 @@ export default function SpareParts() {
     }
   };
 
-  const getStockStatus = (stock: number) => {
+  const getStockStatus = (stock: number, minQty: number = 5) => {
     if (stock <= 0) return 'Out of Stock';
-    if (stock <= 5) return 'Low Stock';
+    if (stock <= minQty) return 'Low Stock';
     return 'In Stock';
   };
 
@@ -377,7 +378,7 @@ export default function SpareParts() {
             </View>
           )}
           renderItem={({ item }) => {
-            const status = getStockStatus(item.stock_quantity);
+            const status = getStockStatus(item.stock_quantity, item.minimum_quantity);
             const isLowStock = item.stock_quantity <= item.minimum_quantity;
 
             return (
@@ -464,7 +465,7 @@ export default function SpareParts() {
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 {selectedPart && (
                   <Text style={[styles.modalSub, { color: theme.colors.textSecondary }]}>
-                    Update inventory for <Text style={{ fontWeight: '600', color: theme.colors.text }}>{selectedPart.name}</Text>. (Current: {selectedPart.stock_quantity})
+                    Update inventory for <Text style={{ fontWeight: '600', color: theme.colors.text }}>{selectedPart.name}</Text>. (Status: {getStockStatus(selectedPart.stock_quantity, selectedPart.minimum_quantity)})
                   </Text>
                 )}
 
@@ -656,31 +657,70 @@ export default function SpareParts() {
       {/* Equipment Selection Modal */}
       <Modal visible={showEquipmentModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '60%', padding: 0 }]}>
-            <View style={[styles.modalHeader, { padding: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', marginBottom: 0 }]}>
-              <Text style={styles.modalTitle}>Select Equipment</Text>
-              <TouchableOpacity onPress={() => setShowEquipmentModal(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+          <View style={[styles.modalContent, { maxHeight: '80%', padding: 0 }]}>
+            <View style={[styles.modalHeader, { padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border, marginBottom: 0 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Equipment</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>Assign this part to a specific unit</Text>
+              </View>
+              <TouchableOpacity onPress={() => { setShowEquipmentModal(false); setEquipmentSearchQuery(''); }}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+
+            {/* Equipment Search */}
+            <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+              <View style={[styles.searchBar, { backgroundColor: theme.colors.background }]}>
+                <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
+                <TextInput
+                  style={[styles.searchInput, { color: theme.colors.text, height: 40 }]}
+                  placeholder="Search equipment..."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={equipmentSearchQuery}
+                  onChangeText={setEquipmentSearchQuery}
+                />
+                {equipmentSearchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setEquipmentSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
-                style={styles.categoryOption}
-                onPress={() => { setNewEquipmentId(null); setShowEquipmentModal(false); }}
+                style={[styles.categoryOption, { borderBottomColor: theme.colors.border }]}
+                onPress={() => { setNewEquipmentId(null); setShowEquipmentModal(false); setEquipmentSearchQuery(''); }}
               >
-                <Text style={styles.categoryOptionText}>None (Inventory Only)</Text>
-                {!newEquipmentId && <Ionicons name="checkmark-circle" size={20} color="#2563EB" />}
+                <View>
+                  <Text style={[styles.categoryOptionText, { color: theme.colors.text }]}>None (Inventory Only)</Text>
+                  <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>Part will not be linked to any equipment</Text>
+                </View>
+                {!newEquipmentId && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />}
               </TouchableOpacity>
-              {equipments.map(eq => (
+              
+              {equipments
+                .filter(eq => eq.name.toLowerCase().includes(equipmentSearchQuery.toLowerCase()))
+                .map(eq => (
                 <TouchableOpacity
                   key={eq.id}
-                  style={styles.categoryOption}
-                  onPress={() => { setNewEquipmentId(eq.id); setShowEquipmentModal(false); }}
+                  style={[styles.categoryOption, { borderBottomColor: theme.colors.border }]}
+                  onPress={() => { setNewEquipmentId(eq.id); setShowEquipmentModal(false); setEquipmentSearchQuery(''); }}
                 >
-                  <Text style={[styles.categoryOptionText, newEquipmentId === eq.id && { color: '#2563EB' }]}>{eq.name}</Text>
-                  {newEquipmentId === eq.id && <Ionicons name="checkmark-circle" size={20} color="#2563EB" />}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.categoryOptionText, { color: theme.colors.text }, newEquipmentId === eq.id && { color: theme.colors.primary }]}>{eq.name}</Text>
+                    {/* Add small detail if available in your DB schema, but for now just name */}
+                  </View>
+                  {newEquipmentId === eq.id && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />}
                 </TouchableOpacity>
               ))}
+
+              {equipments.filter(eq => eq.name.toLowerCase().includes(equipmentSearchQuery.toLowerCase())).length === 0 && (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Ionicons name="search-outline" size={48} color={theme.colors.border} />
+                  <Text style={{ color: theme.colors.textSecondary, marginTop: 12 }}>No equipment found</Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
