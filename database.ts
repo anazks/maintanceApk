@@ -85,7 +85,7 @@ export const initDB = () => {
         name TEXT NOT NULL,
         part_number TEXT UNIQUE NOT NULL,
         category TEXT,
-        minimum_quantity INTEGER DEFAULT 5,
+        minimum_quantity INTEGER DEFAULT 0,
         available_quantity INTEGER DEFAULT 0,
         price TEXT,
         location TEXT,

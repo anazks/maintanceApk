@@ -51,8 +51,8 @@ export default function SpareParts() {
   const [newName, setNewName] = useState('');
   const [newPartNumber, setNewPartNumber] = useState('');
   const [newCategory, setNewCategory] = useState('');
-  const [newQuantity, setNewQuantity] = useState('');
-  const [newMinQuantity, setNewMinQuantity] = useState('5');
+  const [newQuantity, setNewQuantity] = useState('1');
+  const [newMinQuantity, setNewMinQuantity] = useState('0');
   const [newLocation, setNewLocation] = useState('');
   const [newKeeperName, setNewKeeperName] = useState('');
   const [newPrice, setNewPrice] = useState('');
@@ -65,6 +65,7 @@ export default function SpareParts() {
   const [equipments, setEquipments] = useState<{ id: number, name: string }[]>([]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
+  const [showInitialStockModal, setShowInitialStockModal] = useState(false);
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState('');
 
   useEffect(() => {
@@ -99,7 +100,7 @@ export default function SpareParts() {
         name: p.name,
         category: p.category || 'Uncategorized',
         stock_quantity: p.available_quantity || 0,
-        minimum_quantity: p.minimum_quantity || 5,
+        minimum_quantity: p.minimum_quantity ?? 0,
         location: p.location || 'N/A',
         keeper_name: p.keeper_name || 'Unassigned',
         unit_price: parseFloat(p.price || '0') || 0,
@@ -112,7 +113,7 @@ export default function SpareParts() {
     }
   };
 
-  const getStockStatus = (stock: number, minQty: number = 5) => {
+  const getStockStatus = (stock: number, minQty: number = 0) => {
     if (stock <= 0) return 'Out of Stock';
     if (stock <= minQty) return 'Low Stock';
     return 'In Stock';
@@ -179,6 +180,17 @@ export default function SpareParts() {
           'UPDATE Spare_Parts SET available_quantity = available_quantity + ? WHERE id = ?',
           [adjustedQty, selectedPart.id]
         );
+
+        // Immediate alert if stock becomes zero after withdrawal
+        if (adjustmentMode === 'withdraw' && (selectedPart.stock_quantity - qty) === 0) {
+          setTimeout(() => {
+            Alert.alert(
+              'Out of Stock Alert 🚨',
+              `The part "${selectedPart.name}" is now completely out of stock!`,
+              [{ text: 'OK' }]
+            );
+          }, 500);
+        }
       });
       loadParts();
       setShowUsageModal(false);
@@ -210,7 +222,7 @@ export default function SpareParts() {
           newPartNumber,
           newCategory || 'Uncategorized',
           parseFloat(newQuantity) || 0,
-          parseFloat(newMinQuantity) || 5,
+          parseFloat(newMinQuantity) || 0,
           newPrice || '0.00',
           newLocation || 'N/A',
           newKeeperName || 'Unassigned',
@@ -229,7 +241,7 @@ export default function SpareParts() {
           newPartNumber,
           newCategory || 'Uncategorized',
           parseFloat(newQuantity) || 0,
-          parseFloat(newMinQuantity) || 5,
+          parseFloat(newMinQuantity) || 0,
           newPrice || '0.00',
           newLocation || 'N/A',
           newKeeperName || 'Unassigned',
@@ -249,7 +261,7 @@ export default function SpareParts() {
 
       // Reset Form State
       setNewName(''); setNewPartNumber(''); setNewCategory('');
-      setNewQuantity(''); setNewMinQuantity('5'); setNewLocation(''); setNewKeeperName(''); setNewPrice('');
+      setNewQuantity('1'); setNewMinQuantity('0'); setNewLocation(''); setNewKeeperName(''); setNewPrice('');
       setNewDateAdded(new Date().toISOString().split('T')[0]);
       setNewEquipmentId(null);
       setEditingPart(null);
@@ -327,7 +339,7 @@ export default function SpareParts() {
             onPress={() => {
               setEditingPart(null);
               setNewName(''); setNewPartNumber(''); setNewCategory('');
-              setNewQuantity(''); setNewMinQuantity('5'); setNewLocation(''); setNewKeeperName(''); setNewPrice('');
+              setNewQuantity('1'); setNewMinQuantity('0'); setNewLocation(''); setNewKeeperName(''); setNewPrice('');
               setNewDateAdded(new Date().toISOString().split('T')[0]);
               setNewEquipmentId(null);
               setShowAddModal(true);
@@ -583,11 +595,23 @@ export default function SpareParts() {
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Initial Stock</Text>
-                    <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} keyboardType="number-pad" placeholder="0" value={newQuantity} onChangeText={setNewQuantity} />
+                    <TouchableOpacity
+                      style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, justifyContent: 'center' }]}
+                      onPress={() => setShowInitialStockModal(true)}
+                    >
+                      <Text style={{ color: theme.colors.text }}>{newQuantity || 'Select'}</Text>
+                      <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} style={{ position: 'absolute', right: 12 }} />
+                    </TouchableOpacity>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Minimum Threshold</Text>
-                    <TextInput style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} keyboardType="number-pad" placeholder="5" value={newMinQuantity} onChangeText={setNewMinQuantity} />
+                    <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Min. Threshold</Text>
+                    <TextInput 
+                      style={[styles.modalInputFlat, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]} 
+                      keyboardType="number-pad" 
+                      placeholder="0" 
+                      value={newMinQuantity} 
+                      onChangeText={setNewMinQuantity} 
+                    />
                   </View>
                 </View>
 
@@ -650,6 +674,38 @@ export default function SpareParts() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Initial Stock Picker Modal */}
+      <Modal visible={showInitialStockModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '70%', padding: 0 }]}>
+            <View style={[styles.modalHeader, { padding: 20, borderBottomWidth: 1, borderBottomColor: theme.colors.border, marginBottom: 0 }]}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Initial Stock Level</Text>
+              <TouchableOpacity onPress={() => setShowInitialStockModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={Array.from({ length: 100 }, (_, i) => (i + 1).toString())}
+              keyExtractor={item => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.categoryOption, { borderBottomColor: theme.colors.border }]}
+                  onPress={() => {
+                    setNewQuantity(item);
+                    setShowInitialStockModal(false);
+                  }}
+                >
+                  <Text style={[styles.categoryOptionText, { color: theme.colors.text }, newQuantity === item && { color: theme.colors.primary, fontWeight: '700' }]}>
+                    {item} {item === '1' ? 'Unit' : 'Units'}
+                  </Text>
+                  {newQuantity === item && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
+                </TouchableOpacity>
+              )}
+            />
           </View>
         </View>
       </Modal>
