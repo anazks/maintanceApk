@@ -1,11 +1,11 @@
-import { initLlama, LlamaContext } from 'llama.rn';
 import * as FileSystem from 'expo-file-system/legacy';
+import { initLlama, LlamaContext } from 'llama.rn';
 
 let llamaContext: LlamaContext | null = null;
 
 export interface ChatMessage { role: string, text: string }
 
-export async function askAI(prompt: string, pdfContext: string = "", chatHistory: ChatMessage[] = []): Promise<string> {
+export async function askAI(prompt: string, pdfContext: string = "", chatHistory: ChatMessage[] = [], equipName: string = "Equipment"): Promise<string> {
   const MODEL_PATH = (FileSystem as any).documentDirectory + 'ai_model.gguf';
 
   if (!llamaContext) {
@@ -26,17 +26,19 @@ export async function askAI(prompt: string, pdfContext: string = "", chatHistory
     }
   }
 
-  let systemPrompt = `You are an expert, friendly maintenance assistant.
-Provide clear troubleshooting instructions based solely on the referenced text below.
-CRITICAL RULES:
-1. DO NOT use phrases like "According to the manual", "Based on the excerpt", or "The text says". Give the instructions directly and confidently as your own expert knowledge.
-2. DO NOT invent steps or use outside knowledge.
-3. DO NOT use bullet points or lists. Write a single, easy-to-read, conversational paragraph.`;
-  if (pdfContext) {
-    systemPrompt += `\nReference this manual context ONLY to help the technician:\n${pdfContext}`;
-  } else {
-    systemPrompt += `\n(There is no specific manual uploaded yet. Politely mention the user can use 'Upload PDF' if they have one.)`;
-  }
+  const systemPrompt = `You are a strict technical support assistant for ${equipName}.
+Your ONLY source of knowledge is the provided DOCUMENT CONTEXT.
+
+INSTRUCTIONS:
+- Answer the user's question explicitly and completely based ONLY on the DOCUMENT CONTEXT.
+- If the document contains a list or checklist, you MUST write out every single item. Do not omit anything.
+- If the user says a greeting (like "hi", "hello"), reply with: "Hello. How can I help you troubleshoot this equipment today?"
+- If the DOCUMENT CONTEXT says "No document uploaded for this equipment.", reply exactly: "No document uploaded for this equipment."
+- If the answer is not found in the DOCUMENT CONTEXT, reply exactly: "This information is not available in the uploaded document."
+- Do NOT use outside knowledge. Do NOT explain your rules. Do NOT say "Based on the manual".
+
+DOCUMENT CONTEXT:
+${pdfContext}`;
 
   let structuredPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemPrompt}<|eot_id|>`;
   
@@ -56,7 +58,7 @@ CRITICAL RULES:
   try {
     const msgResult = await llamaContext.completion({
       prompt: structuredPrompt,
-      n_predict: 400, // Increased generation limit to prevent empty/cut-off messages
+      n_predict: 800, // Increased generation limit to prevent cutting off long checklists
       stop: stopWords
     });
 

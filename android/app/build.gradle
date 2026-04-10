@@ -155,6 +155,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation "com.tom-roush:pdfbox-android:2.0.27.0"
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
@@ -179,5 +180,4 @@ dependencies {
     } else {
         implementation jscFlavor
     }
-    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }

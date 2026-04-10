@@ -44,41 +44,32 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 250,
-          "resizeMode": "contain",
-          "backgroundColor": "#0F172A",
-          "dark": {
-            "backgroundColor": "#0F172A"
-          }
-        }
-      ],
-      "expo-secure-store",
-      [
-        "expo-dev-client",
-        {
-          "addGeneratedAutomatically": true
-        }
-      ],
-      [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": true,
-          "modes": [
-            "peripheral",
-            "central"
-          ],
-          "bluetoothAlwaysPermission": "Allow Sujata to use Bluetooth for local data synchronization."
-        }
-      ],
-      "expo-sqlite",
-      "llama.rn"
-    ],
+   "plugins": [
+  "expo-router",
+  [
+    "expo-splash-screen",
+    {
+      "image": "./assets/images/splash-icon.png",
+      "imageWidth": 250,
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A",
+      "dark": {
+        "backgroundColor": "#0F172A"
+      }
+    }
+  ],
+  "expo-secure-store",
+  [
+    "react-native-ble-plx",
+    {
+      "isBackgroundEnabled": true,
+      "modes": ["peripheral", "central"],
+      "bluetoothAlwaysPermission": "Allow Sujata to use Bluetooth for local data synchronization."
+    }
+  ],
+  "expo-sqlite",
+  "llama.rn"
+],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

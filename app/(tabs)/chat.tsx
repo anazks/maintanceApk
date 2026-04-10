@@ -24,7 +24,11 @@ export default function ChatScreen() {
     ]);
 
     try {
-      const reply = await handleMessage(userMsg, equipmentContext);
+      const chatHistory = messages.map(m => ({
+        role: m.user ? 'user' : 'assistant',
+        text: m.user || m.bot || ''
+      }));
+      const reply = await handleMessage(userMsg, equipmentContext, chatHistory);
       setMessages((prev) => prev.map(msg => 
           msg.id.endsWith('b_loading') ? { ...msg, id: Date.now().toString() + 'b', bot: reply } : msg
       ));
