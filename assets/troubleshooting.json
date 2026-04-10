@@ -1,0 +1,51 @@
+[
+  {
+    "id": "motor_not_starting",
+    "keywords": [
+      "motor not starting",
+      "motor dead",
+      "not turning on",
+      "no response",
+      "machine not running"
+    ],
+    "steps": [
+      {
+        "id": 1,
+        "question": "Check if power supply is ON",
+        "yes": 2,
+        "no": "Turn on power supply and try again"
+      },
+      {
+        "id": 2,
+        "question": "Is there any unusual noise?",
+        "yes": "Check motor bearings",
+        "no": "Check wiring connections"
+      }
+    ]
+  },
+  {
+    "id": "app_crashing",
+    "keywords": [
+      "app crashing",
+      "crashing",
+      "app closes",
+      "quits",
+      "keeps stopping",
+      "stopped"
+    ],
+    "steps": [
+      {
+        "id": 1,
+        "question": "Are you using the latest app version?",
+        "yes": 2,
+        "no": "Please update your app from the Play Store/App Store."
+      },
+      {
+        "id": 2,
+        "question": "Is your phone out of storage?",
+        "yes": "Clear some space on your phone and try again.",
+        "no": "Please reinstall the app or contact support."
+      }
+    ]
+  }
+]

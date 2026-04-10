@@ -18,8 +18,30 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import * as DocumentPicker from 'expo-document-picker';
+import { NativeModules } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { getDB } from '../database';
+import { handleMessage } from '../services/chatService';
+
+const renderMarkdown = (text: string, baseStyle: any) => {
+  if (!text) return null;
+  // Split by bold (**bold**) or italic (*italic*)
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  
+  return (
+    <Text style={baseStyle}>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <Text key={i} style={[{ fontWeight: 'bold' }, baseStyle]}>{part.slice(2, -2)}</Text>;
+        } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+          return <Text key={i} style={[{ fontStyle: 'italic' }, baseStyle]}>{part.slice(1, -1)}</Text>;
+        }
+        return <Text key={i} style={baseStyle}>{part}</Text>;
+      })}
+    </Text>
+  );
+};
 
 const { width } = Dimensions.get('window');
 
@@ -141,6 +163,8 @@ export default function EquipmentDetails() {
     equipment_id: ''
   });
 
+  const [hasPDF, setHasPDF] = useState(false);
+
   // Troubleshooting State
   const [troubleshooting, setTroubleshooting] = useState<Troubleshooting[]>([]);
   const [showTroubleModal, setShowTroubleModal] = useState(false);
@@ -152,6 +176,33 @@ export default function EquipmentDetails() {
     isGeneral: true
   });
   const [editTroubleId, setEditTroubleId] = useState<number | null>(null);
+
+  // Chat Interface State
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', text: string}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatScrollRef = React.useRef<ScrollView>(null);
+
+  const submitChat = async () => {
+    if (!chatInput.trim()) return;
+    const userMsg = chatInput.trim();
+    // Snapshot the chat history before appending the current message
+    const historySnapshot = [...chatMessages];
+    
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const aiResponse = await handleMessage(userMsg, equipment?.id?.toString(), historySnapshot);
+      setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
+    } catch (e: any) {
+      setChatMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + e.message }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -235,6 +286,9 @@ export default function EquipmentDetails() {
           ORDER BY equipment_id DESC, created_at DESC
         `, [item.id]);
         setTroubleshooting(trouble);
+
+        const pdfDoc = db.getFirstSync<{id: number}>('SELECT id FROM Equipment_Documents WHERE equipment_id = ?', [item.id]);
+        setHasPDF(!!pdfDoc);
 
       } else {
         Alert.alert('Error', 'Equipment not found.');
@@ -597,6 +651,53 @@ export default function EquipmentDetails() {
     );
   };
 
+  const handleUploadPDF = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true
+      });
+      
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      
+      const asset = result.assets[0];
+      const fileUri = asset.uri;
+      
+      setLoading(true);
+      if (!NativeModules.PdfExtractorModule) {
+        Alert.alert('Error', 'PdfExtractorModule native library is not linked. Please build the Android app using Android Studio first.');
+        setLoading(false);
+        return;
+      }
+      
+      const parsedText = await NativeModules.PdfExtractorModule.extractText(fileUri);
+      
+      if (!parsedText || parsedText.trim() === '') {
+        Alert.alert('Warning', 'The uploaded PDF appears to be a scanned image or contains no readable text. The AI won\'t be able to read it.');
+        // We will still save it so the UI explicitly shows the state or lets AI state it's empty
+      }
+      
+      if (!equipment) return;
+      const db = getDB();
+      
+      // Delete old PDF for this equipment before inserting
+      db.runSync('DELETE FROM Equipment_Documents WHERE equipment_id = ?', [equipment.id]);
+      
+      db.runSync(
+        'INSERT INTO Equipment_Documents (equipment_id, file_name, file_uri, parsed_text) VALUES (?, ?, ?, ?)',
+        [equipment.id, asset.name, fileUri, parsedText]
+      );
+      
+      Alert.alert('Success', 'PDF uploaded and processed. Chatbot can now read this manual!');
+      loadDetails(equipment.id);
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to read PDF: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Helper for Calendar
   const getDaysInMonth = (month: number, year: number) => {
     return new Date(year, month + 1, 0).getDate();
@@ -852,14 +953,25 @@ export default function EquipmentDetails() {
 
         {/* Troubleshooting Guides */}
         <View style={[styles.sectionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <View style={styles.sectionHeader}>
+          <View style={[styles.sectionHeader, { flexWrap: 'wrap', gap: 12 }]}>
             <View style={styles.sectionHeaderTitleRow}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Troubleshooting Guides</Text>
               <View style={[styles.sectionBadge, { backgroundColor: theme.colors.background }]}>
                 <Text style={[styles.sectionBadgeText, { color: theme.colors.textSecondary }]}>{troubleshooting.length}</Text>
               </View>
             </View>
-            {isAdmin && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
+                onPress={() => {
+                  setChatMessages([]);
+                  setShowChatModal(true);
+                }}
+              >
+                <Ionicons name="chatbubbles-outline" size={16} color={theme.colors.primary} />
+                <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Chat with AI</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#1E3A8A' : '#EFF6FF', borderColor: theme.dark ? '#1E40AF' : '#DBEAFE' }]}
               onPress={() => {
@@ -871,7 +983,16 @@ export default function EquipmentDetails() {
                 <Ionicons name="add" size={16} color={theme.colors.primary} />
                 <Text style={[styles.linkSpareActionText, { color: theme.colors.primary }]}>Add Method</Text>
               </TouchableOpacity>
-            )}
+              <TouchableOpacity
+                style={[styles.linkSpareActionBtn, { backgroundColor: theme.dark ? '#064E3B' : '#D1FAE5', borderColor: theme.dark ? '#047857' : '#A7F3D0' }]}
+                onPress={handleUploadPDF}
+              >
+                <Ionicons name={hasPDF ? "checkmark-circle" : "document-attach-outline"} size={16} color={theme.colors.success} />
+                <Text style={[styles.linkSpareActionText, { color: theme.colors.success }]}>
+                  {hasPDF ? 'PDF Loaded' : 'Upload PDF'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {troubleshooting.length === 0 ? (
@@ -1627,6 +1748,89 @@ export default function EquipmentDetails() {
         </View>
       </Modal>
 
+      {/* Chat Modal */}
+      <Modal visible={showChatModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%', flex: 1 }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>AI Troubleshooter</Text>
+                <Text style={styles.modalSub}>Ask questions based on PDF manuals.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowChatModal(false)}>
+                <Ionicons name="close-circle-outline" size={28} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView 
+              ref={chatScrollRef}
+              style={{ flex: 1, marginBottom: 12 }} 
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+            >
+              {chatMessages.length === 0 && (
+                <Text style={{ textAlign: 'center', marginTop: 20, color: '#9CA3AF' }}>Say hello to start troubleshooting!</Text>
+              )}
+              {chatMessages.map((msg, index) => (
+                <View key={index} style={{
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  backgroundColor: msg.role === 'user' ? '#2563EB' : '#FFFFFF',
+                  padding: 14,
+                  borderTopLeftRadius: 18,
+                  borderTopRightRadius: 18,
+                  borderBottomLeftRadius: msg.role === 'user' ? 18 : 4,
+                  borderBottomRightRadius: msg.role === 'user' ? 4 : 18,
+                  marginBottom: 12,
+                  maxWidth: '85%',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 3,
+                  elevation: 1,
+                  borderWidth: msg.role === 'ai' ? 1 : 0,
+                  borderColor: '#F3F4F6'
+                }}>
+                  {renderMarkdown(msg.text, { 
+                    color: msg.role === 'user' ? '#FFFFFF' : '#1F2937', 
+                    fontSize: 15, 
+                    lineHeight: 22 
+                  })}
+                </View>
+              ))}
+              {chatLoading && (
+                <View style={{ alignSelf: 'flex-start', backgroundColor: '#F3F4F6', padding: 12, borderRadius: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#4B5563" />
+                  <Text style={{ marginLeft: 8, color: '#4B5563' }}>AI is thinking...</Text>
+                </View>
+              )}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput
+                style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                placeholder="Describe the issue..."
+                value={chatInput}
+                onChangeText={setChatInput}
+                onSubmitEditing={submitChat}
+                editable={!chatLoading}
+              />
+              <TouchableOpacity
+                style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 16, opacity: chatLoading ? 0.5 : 1 }}
+                onPress={submitChat}
+                disabled={chatLoading}
+              >
+                <Ionicons name="send" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Floating Chatbot Button */}
+      <TouchableOpacity 
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]} 
+        onPress={() => setShowChatModal(true)}
+      >
+        <Ionicons name="chatbubble-ellipses" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -2192,12 +2396,7 @@ const styles = StyleSheet.create({
     padding: 24,
     maxHeight: '95%'
   },
-  editModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 24,
-    maxHeight: '95%'
-  },
+
   assignModalContent: {
     maxHeight: '90%'
   },
@@ -2456,5 +2655,20 @@ const styles = StyleSheet.create({
   troubleSolution: {
     fontSize: 14,
     lineHeight: 20
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
   }
 });

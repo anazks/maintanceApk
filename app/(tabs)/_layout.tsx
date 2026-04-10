@@ -42,6 +42,13 @@ export default function TabLayout() {
           }}
         />
 
+      {/* Chat Tab */}
+      <Tabs.Screen
+        name="chat"
+        options={{
+          href: null,
+        }}
+      />
       {/* Settings Tab */}
       <Tabs.Screen
         name="settings"
