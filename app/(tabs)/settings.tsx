@@ -396,7 +396,7 @@ export default function Settings() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
-        copyToCacheDirectory: true
+        copyToCacheDirectory: false
       });
       
       if (result.canceled || !result.assets || result.assets.length === 0) return;

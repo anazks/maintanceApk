@@ -26,17 +26,20 @@ export async function askAI(prompt: string, pdfContext: string = "", chatHistory
     }
   }
 
-  let systemPrompt = `You are an expert, friendly maintenance assistant.
-Provide clear troubleshooting instructions based solely on the referenced text below.
+  const systemPrompt = `You are an expert technical assistant.
+Your sole purpose is to answer the user's question using ONLY the knowledge contained in the CONTEXT below.
+
 CRITICAL RULES:
-1. DO NOT use phrases like "According to the manual", "Based on the excerpt", or "The text says". Give the instructions directly and confidently as your own expert knowledge.
-2. DO NOT invent steps or use outside knowledge.
-3. DO NOT use bullet points or lists. Write a single, easy-to-read, conversational paragraph.`;
-  if (pdfContext) {
-    systemPrompt += `\nReference this manual context ONLY to help the technician:\n${pdfContext}`;
-  } else {
-    systemPrompt += `\n(There is no specific manual uploaded yet. Politely mention the user can use 'Upload PDF' if they have one.)`;
-  }
+1. Synthesize the context to provide a direct, helpful, and accurate answer to the question.
+2. If the user asks for more information or repeats a question, elaborate heavily on your previous answer using further details from the CONTEXT.
+3. If the CONTEXT physically does not contain the topic needed to answer the question, you MUST immediately reply EXACTLY: "There is no data available regarding this question in the manual."
+4. Do NOT use outside knowledge, common sense, or guessing.
+5. Do NOT mention "According to the context" or "The manual says".
+
+CONSTRAINED CONTEXT:
+====================
+${pdfContext}
+====================`;
 
   let structuredPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemPrompt}<|eot_id|>`;
   
@@ -56,13 +59,14 @@ CRITICAL RULES:
   try {
     const msgResult = await llamaContext.completion({
       prompt: structuredPrompt,
-      n_predict: 400, // Increased generation limit to prevent empty/cut-off messages
+      n_predict: 400,
+      temperature: 0.1,
       stop: stopWords
     });
 
     let text = msgResult.text?.trim() || '';
     if (!text) {
-      text = "I apologize, but I was unable to formulate a response based on the manual. Could you please rephrase your question?";
+      text = "There is no data available regarding this question in the manual.";
     }
     return text;
   } catch (e: any) {
