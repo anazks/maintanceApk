@@ -12,3 +12,6 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+-keep class com.Sujata.maintanceapp.** { *; }
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class org.apache.fontbox.** { *; }

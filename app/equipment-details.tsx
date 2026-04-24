@@ -1750,7 +1750,7 @@ export default function EquipmentDetails() {
 
       {/* Chat Modal */}
       <Modal visible={showChatModal} transparent animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0} style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '80%', flex: 1 }]}>
             <View style={styles.modalHeader}>
               <View>

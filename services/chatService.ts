@@ -29,11 +29,18 @@ export async function generateReply(text: string, equipId?: string, chatHistory:
       
       const chunks = chunkText(allText);
       
-      // Fix: Combine previous user messages to preserve keyword context for follow-up questions
-      const prevUserMsgs = chatHistory.filter(m => m.role === 'user').slice(-2).map(m => m.text).join(' ');
-      const searchQuery = prevUserMsgs + ' ' + text;
-      
-      pdfExcerpts = searchPdfContext(chunks, searchQuery);
+      // 1. Primary Search: Focus strictly on the current question to prevent topic-switch bleeding
+      pdfExcerpts = searchPdfContext(chunks, text);
+
+      // 2. Fallback Search: If Primary Search fails, add context from the last user message
+      if (!pdfExcerpts || pdfExcerpts.trim().length < 20) {
+        const lastUserMsg = chatHistory.filter(m => m.role === 'user').slice(-1)[0]?.text;
+        if (lastUserMsg && lastUserMsg !== text) {
+          console.log('Primary search failed/empty. Falling back to context-aware search...');
+          const fallbackQuery = `${lastUserMsg} ${text}`;
+          pdfExcerpts = searchPdfContext(chunks, fallbackQuery);
+        }
+      }
 
     } catch(e) { 
       console.error('RAG Error', e); 
