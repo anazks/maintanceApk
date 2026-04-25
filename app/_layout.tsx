@@ -3,6 +3,7 @@ import { Stack, useRouter, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDB } from '../database';
@@ -59,10 +60,12 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <RootLayoutContent />
-      </ThemeProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <RootLayoutContent />
+        </ThemeProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

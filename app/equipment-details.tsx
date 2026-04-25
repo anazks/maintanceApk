@@ -182,6 +182,8 @@ export default function EquipmentDetails() {
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', text: string}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatStatus, setChatStatus] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const chatScrollRef = React.useRef<ScrollView>(null);
 
   const submitChat = async () => {
@@ -195,12 +197,20 @@ export default function EquipmentDetails() {
     setChatLoading(true);
 
     try {
-      const aiResponse = await handleMessage(userMsg, equipment?.id?.toString(), historySnapshot);
+      const aiResponse = await handleMessage(
+         userMsg, 
+         equipment?.id?.toString(), 
+         historySnapshot,
+         (status: string) => setChatStatus(status)
+      );
+      setChatStatus(null);
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
     } catch (e: any) {
+      setChatStatus(null);
       setChatMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + e.message }]);
     } finally {
       setChatLoading(false);
+      setChatStatus(null);
     }
   };
 
@@ -659,12 +669,21 @@ export default function EquipmentDetails() {
       });
       
       if (result.canceled || !result.assets || result.assets.length === 0) return;
-      
-      const asset = result.assets[0];
+          const asset = result.assets[0];
       const fileUri = asset.uri;
       
       setLoading(true);
+      setUploadProgress(0);
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev === null) return null;
+          return prev >= 95 ? 95 : prev + 5;
+        });
+      }, 500);
+
       if (!NativeModules.PdfExtractorModule) {
+        clearInterval(progressInterval);
+        setUploadProgress(null);
         Alert.alert('Error', 'PdfExtractorModule native library is not linked. Please build the Android app using Android Studio first.');
         setLoading(false);
         return;
@@ -672,6 +691,9 @@ export default function EquipmentDetails() {
       
       const parsedText = await NativeModules.PdfExtractorModule.extractText(fileUri);
       
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
       if (!parsedText || parsedText.trim() === '') {
         Alert.alert('Warning', 'The uploaded PDF appears to be a scanned image or contains no readable text. The AI won\'t be able to read it.');
         // We will still save it so the UI explicitly shows the state or lets AI state it's empty
@@ -695,6 +717,7 @@ export default function EquipmentDetails() {
       Alert.alert('Error', 'Failed to read PDF: ' + error.message);
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -728,7 +751,9 @@ export default function EquipmentDetails() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading equipment details...</Text>
+        <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+          {uploadProgress !== null ? `Extracting PDF Text... ${uploadProgress}%` : 'Loading equipment details...'}
+        </Text>
       </View>
     );
   }
@@ -1799,7 +1824,7 @@ export default function EquipmentDetails() {
               {chatLoading && (
                 <View style={{ alignSelf: 'flex-start', backgroundColor: '#F3F4F6', padding: 12, borderRadius: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
                   <ActivityIndicator size="small" color="#4B5563" />
-                  <Text style={{ marginLeft: 8, color: '#4B5563' }}>AI is thinking...</Text>
+                  <Text style={{ marginLeft: 8, color: '#4B5563', fontStyle: 'italic' }}>{chatStatus || 'AI is thinking...'}</Text>
                 </View>
               )}
             </ScrollView>
