@@ -186,7 +186,7 @@ export default function EquipmentDetails() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const chatScrollRef = React.useRef<ScrollView>(null);
 
-  const submitChat = async () => {
+  const submitChat = async (bypassAi: boolean = false) => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput.trim();
     // Snapshot the chat history before appending the current message
@@ -201,7 +201,8 @@ export default function EquipmentDetails() {
          userMsg, 
          equipment?.id?.toString(), 
          historySnapshot,
-         (status: string) => setChatStatus(status)
+         (status: string) => setChatStatus(status),
+         bypassAi
       );
       setChatStatus(null);
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
@@ -1828,21 +1829,31 @@ export default function EquipmentDetails() {
                 </View>
               )}
             </ScrollView>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TextInput
                 style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
                 placeholder="Describe the issue..."
                 value={chatInput}
                 onChangeText={setChatInput}
-                onSubmitEditing={submitChat}
+                onSubmitEditing={() => submitChat(false)}
                 editable={!chatLoading}
               />
+              {/* Button A: Ask AI Analysis */}
               <TouchableOpacity
-                style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 16, opacity: chatLoading ? 0.5 : 1 }}
-                onPress={submitChat}
+                style={{ backgroundColor: '#2563EB', padding: 12, borderRadius: 12, opacity: chatLoading ? 0.5 : 1, alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => submitChat(false)}
                 disabled={chatLoading}
               >
-                <Ionicons name="send" size={20} color="#FFFFFF" />
+                <Ionicons name="hardware-chip-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              {/* Button B: Direct PDF View (AI Bypass) */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#10B981', padding: 12, borderRadius: 12, opacity: chatLoading ? 0.5 : 1, alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => submitChat(true)}
+                disabled={chatLoading}
+              >
+                <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </View>

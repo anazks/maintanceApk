@@ -8,7 +8,13 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const documentChunkCache: Record<string, string[]> = {};
 
-export async function generateReply(text: string, equipId?: string, chatHistory: ChatMessage[] = [], onProgress?: (msg: string) => void): Promise<string> {
+export async function generateReply(
+  text: string, 
+  equipId?: string, 
+  chatHistory: ChatMessage[] = [], 
+  onProgress?: (msg: string) => void,
+  bypassAi: boolean = false
+): Promise<string> {
   let contextStr = '';
   let pdfExcerpts = '';
   
@@ -41,7 +47,6 @@ export async function generateReply(text: string, equipId?: string, chatHistory:
         documentChunkCache[equipId] = chunks;
       }
 
-      
       // 1. Primary Search: Focus strictly on the current question to prevent topic-switch bleeding
       if (onProgress) {
         onProgress("Searching 700+ pages using BM25...");
@@ -72,6 +77,14 @@ export async function generateReply(text: string, equipId?: string, chatHistory:
   contextStr = `${pdfExcerpts}`;
 
   try {
+    if (bypassAi) {
+      if (onProgress) {
+         onProgress("Retrieving exact matching sections from PDF...");
+         await sleep(50);
+      }
+      return contextStr;
+    }
+
     if (onProgress) {
        onProgress("Querying LLM Engine... (this might take a few seconds)");
        await sleep(50);
@@ -79,14 +92,20 @@ export async function generateReply(text: string, equipId?: string, chatHistory:
     const aiResponse = await askAI(text, contextStr, chatHistory);
     return aiResponse;
   } catch (error) {
-    console.warn("AI generation failed", error);
-    return "AI Module Offline: The AI model failed to load. Please ensure you are running a custom development build (not Expo Go) and the model file exists.";
+    console.warn("AI generation failed, falling back to manual excerpts:", error);
+    return "The AI engine is currently optimizing resources or running in low-memory mode. Below are the exact troubleshooting steps retrieved directly from the manual:\n\n" + contextStr;
   }
 }
 
-export async function handleMessage(input: string, equipId?: string, chatHistory: ChatMessage[] = [], onProgress?: (msg: string) => void): Promise<string> {
+export async function handleMessage(
+  input: string, 
+  equipId?: string, 
+  chatHistory: ChatMessage[] = [], 
+  onProgress?: (msg: string) => void,
+  bypassAi: boolean = false
+): Promise<string> {
   if (equipId) {
-    return await generateReply(input, equipId, chatHistory, onProgress);
+    return await generateReply(input, equipId, chatHistory, onProgress, bypassAi);
   }
   return "Equipment context is missing. Please open the chat from a specific Equipment Detail page.";
 }

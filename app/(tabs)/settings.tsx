@@ -422,7 +422,16 @@ export default function Settings() {
       checkModelAvailability();
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Error', 'Failed to load model.');
+      const errMsg = error.message || '';
+      if (errMsg.includes('ENOSPC') || errMsg.includes('space') || errMsg.includes('No space')) {
+        Alert.alert(
+          'Emulator Disk Full (ENOSPC)',
+          'The Android Emulator has run out of storage while copying the massive GGUF model.\n\nTo resolve this:\n\nOption A: Increase Emulator Storage\n1. In Android Studio, open "Device Manager".\n2. Click the edit (pencil) icon next to your emulator.\n3. Click "Show Advanced Settings".\n4. Scroll down to "Memory and Storage" -> "Internal Storage".\n5. Change it to at least 8 GB (8192 MB).\n6. Click "Finish", then wipe data and cold boot the emulator.\n\nOption B: Direct ADB Push (Fastest & Zero Double-Copy Overhead)\nRun this command in your computer\'s terminal to push the GGUF file directly into the app:\n\nadb push <path_to_model_on_pc>/ai_model.gguf /data/data/com.Sujata.maintanceapp/files/ai_model.gguf',
+          [{ text: 'Got It' }]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to load model: ' + errMsg);
+      }
     } finally {
       setModelLoading(false);
     }

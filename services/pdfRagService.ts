@@ -16,16 +16,30 @@ const docCache: Record<string, DocumentIndex> = {};
 const k1 = 1.2;
 const b = 0.75;
 
-// Split large document text into ~600 word chunks with 150 words of overlap to maintain massive sections logically intact
+// Split large document text into ~180 word micro-chunks with 40 words of overlap to maintain sections logically intact
+// Split large document text into ~180 word micro-chunks by lines, preserving original paragraphs and bullet point spacing
 export function chunkText(text: string): string[] {
   if (!text) return [];
-  const words = text.split(/\s+/);
+  const lines = text.split('\n');
   const chunks = [];
-  const chunkSize = 600; 
-  const overlap = 150;
+  let currentChunk: string[] = [];
+  let currentWordCount = 0;
   
-  for (let i = 0; i < words.length; i += (chunkSize - overlap)) {
-    chunks.push(words.slice(i, i + chunkSize).join(' '));
+  for (const line of lines) {
+    currentChunk.push(line);
+    const wordsInLine = line.trim().split(/\s+/).filter(w => w.length > 0).length;
+    currentWordCount += wordsInLine;
+    
+    if (currentWordCount >= 180) {
+      chunks.push(currentChunk.join('\n'));
+      // Keep last 3 lines for clean overlap and context flow
+      currentChunk = currentChunk.slice(-3);
+      currentWordCount = currentChunk.join(' ').split(/\s+/).filter(w => w.length > 0).length;
+    }
+  }
+  
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join('\n'));
   }
   return chunks;
 }
@@ -156,11 +170,31 @@ export function searchPdfContext(textChunks: string[], query: string, equipId?: 
 
   const activeChunks = scoredChunks.filter(c => c.score > 0).sort((a, b) => b.score - a.score);
 
-  if (activeChunks.length === 0) return '';
+  if (activeChunks.length === 0) {
+    // Fallback: simple case-insensitive substring search to guarantee context retrieval if keywords exist
+    const fallbackScored = textChunks.map((chunk, i) => {
+      let score = 0;
+      const chunkLower = chunk.toLowerCase();
+      for (const kw of correctedKeywords) {
+        if (chunkLower.includes(kw)) {
+          score += 1;
+        }
+      }
+      return { text: chunk, score, index: i };
+    });
+    
+    const fallbackActive = fallbackScored.filter(c => c.score > 0).sort((a, b) => b.score - a.score);
+    if (fallbackActive.length === 0) return '';
+    
+    const topChunksObj = fallbackActive.slice(0, 2).sort((a, b) => a.index - b.index);
+    let formattedContext = "Manual Context:\n";
+    formattedContext += topChunksObj.map(r => `[DOCUMENT LOCATION: Section ${r.index}]\n${r.text}`).join('\n\n-----------------\n\n');
+    return formattedContext;
+  }
 
-  // Take top 3 best-matching chunks
+  // Take top 2 best-matching micro-chunks to ensure ultra-fast context processing
   // Sort them by original index to maintain the reading order exactly from the PDF.
-  const topChunksObj = activeChunks.slice(0, 3).sort((a, b) => a.index - b.index);
+  const topChunksObj = activeChunks.slice(0, 2).sort((a, b) => a.index - b.index);
   
   let formattedContext = "Manual Context:\n";
   formattedContext += topChunksObj.map(r => `[DOCUMENT LOCATION: Section ${r.index}]\n${r.text}`).join('\n\n-----------------\n\n');
